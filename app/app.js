@@ -29,7 +29,7 @@ const menus = [
   ["b2b","B2B 작업 통계","b2b_view"],["calendar","근무·휴무 달력","calendar_use"],["events","회사 일정·B2C 행사","calendar_use"],["meetings","회의실 예약","calendar_use"],["contractors","외주 업체 인력관리","calendar_manage"],["vehicles","차량관리","dashboard_view"],["account","내 정보·비밀번호","dashboard_view"],
   ["kpi","B2C KPI 관리","kpi_manage"],["employees","직원관리","employees_manage"],["permissions","권한관리","permissions_manage"]
 ];
-let state = { user:null, profile:null, permissions:{}, cards:[], items:[], notices:[], employees:[], employeeRegistry:[], orgTeams:[], privateMessages:[], chatMessages:[], messengerRooms:[], messengerMembers:[], selectedMessengerRoom:"global", calendarEntries:[], leaveAdjustments:[], purchaseRequests:[], contractorWorkforce:[], editingContractorId:null, companyEvents:[], meetingBookings:[], vehicles:[], vehicleTrips:[], vehicleMaintenance:[], selectedVehicleId:null, editingVehicleId:null, editingTripId:null, editingMaintenanceId:null, selectedPermissionUser:null, chatChannel:null, calendarDate:new Date(), orgEditMode:false };
+let state = { user:null, profile:null, permissions:{}, cards:[], items:[], notices:[], employees:[], employeeRegistry:[], orgTeams:[], privateMessages:[], chatMessages:[], messengerRooms:[], messengerMembers:[], selectedMessengerRoom:"global", calendarEntries:[], leaveAdjustments:[], leaveBalances:[], purchaseRequests:[], contractorWorkforce:[], editingContractorId:null, companyEvents:[], meetingBookings:[], vehicles:[], vehicleTrips:[], vehicleMaintenance:[], selectedVehicleId:null, editingVehicleId:null, editingTripId:null, editingMaintenanceId:null, selectedPermissionUser:null, chatChannel:null, calendarDate:new Date(), orgEditMode:false };
 
 const $ = id => document.getElementById(id);
 
@@ -376,13 +376,22 @@ function todayLunchStats(date=new Date().toISOString().slice(0,10)){
 
 async function loadLeaveAdjustments(){
   if(!has("employees_manage")&&!has("calendar_manage"))return;
-  const {data,error}=await supabaseClient.rpc("admin_leave_adjustment_list");
-  if(error){
-    console.warn("V42 연차·대휴 이력 조회 실패",error);
+  const [historyResult,balanceResult]=await Promise.all([
+    supabaseClient.rpc("admin_leave_adjustment_list"),
+    supabaseClient.rpc("employee_leave_balance_list")
+  ]);
+  if(historyResult.error){
+    console.warn("연차·대휴 이력 조회 실패",historyResult.error);
     state.leaveAdjustments=[];
-    return;
+  }else{
+    state.leaveAdjustments=historyResult.data||[];
   }
-  state.leaveAdjustments=data||[];
+  if(balanceResult.error){
+    console.warn("연차·대휴 현재값 조회 실패",balanceResult.error);
+    state.leaveBalances=[];
+  }else{
+    state.leaveBalances=balanceResult.data||[];
+  }
 }
 
 function employeeLeaveStats(employeeId,grantedOverride=null){
@@ -395,12 +404,15 @@ function employeeLeaveStats(employeeId,grantedOverride=null){
   const adjustments=state.leaveAdjustments.filter(x=>x.employee_id===employeeId);
   const annualAdjustment=adjustments.filter(x=>x.leave_type==="annual").reduce((a,x)=>a+Number(x.amount||0),0);
   const compAdjustment=adjustments.filter(x=>x.leave_type==="comp").reduce((a,x)=>a+Number(x.amount||0),0);
+  const savedBalance=state.leaveBalances.find(x=>x.employee_id===employeeId);
+  const calculatedAnnual=granted+annualAdjustment-annualUsed;
+  const calculatedComp=weekendCredit+compAdjustment-compUsed;
   return {
     granted,annualUsed,annualAdjustment,
-    annualBalance:granted+annualAdjustment-annualUsed,
+    annualBalance:savedBalance?Number(savedBalance.annual_balance||0):calculatedAnnual,
     weekendCredit,compUsed,compAdjustment,
     compGranted:weekendCredit+compAdjustment,
-    compBalance:weekendCredit+compAdjustment-compUsed
+    compBalance:savedBalance?Number(savedBalance.comp_balance||0):calculatedComp
   };
 }
 
@@ -1994,23 +2006,19 @@ async function saveLeaveBalances(){
   if(!employeeId){toast("가입 완료 직원을 선택하세요.");return}
   const reason=$("editLeaveAdjustmentReason").value.trim();
   if(!reason){toast("수정 사유를 입력하세요.");$("editLeaveAdjustmentReason").focus();return}
-  const current=employeeLeaveStats(employeeId,Number($("editAnnualLeave").value||0));
   const annualTarget=Number($("editAnnualBalanceTarget").value);
   const compTarget=Number($("editCompBalanceTarget").value);
   if(!Number.isFinite(annualTarget)||annualTarget<0||!Number.isFinite(compTarget)||compTarget<0){
     toast("연차와 대휴 잔여일수를 올바르게 입력하세요.");return;
   }
-  const annualDelta=Number((annualTarget-current.annualBalance).toFixed(2));
-  const compDelta=Number((compTarget-current.compBalance).toFixed(2));
-  if(Math.abs(annualDelta)<0.001&&Math.abs(compDelta)<0.001){toast("변경된 잔여일수가 없습니다.");return}
 
   $("saveLeaveBalancesBtn").disabled=true;
   $("saveLeaveBalancesBtn").textContent="저장 중...";
   try{
     const {error}=await supabaseClient.rpc("admin_set_employee_leave_balances",{
       p_employee_id:employeeId,
-      p_annual_delta:annualDelta,
-      p_comp_delta:compDelta,
+      p_annual_target:annualTarget,
+      p_comp_target:compTarget,
       p_reason:reason
     });
     if(error){
@@ -2037,10 +2045,13 @@ async function quickLeaveAdjustment(type,delta){
   if(!employeeId){toast("가입 완료 직원을 선택하세요.");return}
   const reason=$("editLeaveAdjustmentReason").value.trim();
   if(!reason){toast("먼저 수정 사유를 입력하세요.");$("editLeaveAdjustmentReason").focus();return}
+  const current=employeeLeaveStats(employeeId,Number($("editAnnualLeave").value||0));
+  const annualTarget=type==="annual"?Number((current.annualBalance+Number(delta)).toFixed(2)):current.annualBalance;
+  const compTarget=type==="comp"?Number((current.compBalance+Number(delta)).toFixed(2)):current.compBalance;
   const {error}=await supabaseClient.rpc("admin_set_employee_leave_balances",{
     p_employee_id:employeeId,
-    p_annual_delta:type==="annual"?Number(delta):0,
-    p_comp_delta:type==="comp"?Number(delta):0,
+    p_annual_target:annualTarget,
+    p_comp_target:compTarget,
     p_reason:reason
   });
   if(error){
