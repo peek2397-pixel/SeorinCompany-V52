@@ -2367,14 +2367,15 @@ async function savePermissions(){
     return;
   }
 
-  const obj={user_id:state.selectedPermissionUser};
+  const permissionValues={};
   document.querySelectorAll("[data-perm]").forEach(x=>{
-    obj[x.dataset.perm]=x.checked;
+    permissionValues[x.dataset.perm]=x.checked;
   });
 
-  const {error}=await supabaseClient
-    .from("user_permissions")
-    .upsert(obj,{onConflict:"user_id"});
+  const {error}=await supabaseClient.rpc("admin_save_user_permissions",{
+    p_user_id:state.selectedPermissionUser,
+    p_permissions:permissionValues
+  });
 
   if(error){
     toast("권한 저장 실패: "+error.message);
