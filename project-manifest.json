@@ -1,0 +1,12 @@
+{
+  "project": "SeorinCompany Logistics Portal",
+  "version": "V41",
+  "windows_installer": "NSIS",
+  "desktop_shortcut": true,
+  "start_menu_shortcut": true,
+  "icon": "Dokdo Lotion",
+  "github_actions": [
+    ".github/workflows/build-windows.yml",
+    ".github/workflows/release-windows.yml"
+  ]
+}
