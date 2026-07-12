@@ -833,3 +833,5 @@ body.modal-open{overflow:hidden}
 .private-reply-box{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px}
 .private-reply-box textarea{min-height:84px}
 @media(max-width:1200px){#privatePage .content-grid{grid-template-columns:1fr}.private-chat-bubble{max-width:90%}}
+
+.permission-bulk-bar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}.permission-user-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.permission-user{display:flex;align-items:center;gap:8px}.permission-user input{width:17px;height:17px;flex:0 0 auto}.permission-user .permission-user-name{flex:1}.permission-user small{margin-left:auto}.permission-user.selected-bulk{background:#f2f7ff}.backup-note{font-size:12px;color:var(--muted)}

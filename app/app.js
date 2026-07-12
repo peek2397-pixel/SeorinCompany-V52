@@ -52,7 +52,7 @@ const menus = [
   ["employees","직원관리","employees_manage"],
   ["permissions","권한관리","permissions_manage"]
 ];
-let state = { user:null, profile:null, permissions:{}, cards:[], items:[], notices:[], employees:[], employeeRegistry:[], orgTeams:[], privateMessages:[], privateReplies:[], selectedPrivateMessageId:null, chatMessages:[], messengerRooms:[], messengerMembers:[], selectedMessengerRoom:"global", calendarEntries:[], leaveAdjustments:[], purchaseRequests:[], contractorWorkforce:[], editingContractorId:null, companyEvents:[], meetingBookings:[], vehicles:[], vehicleTrips:[], vehicleMaintenance:[], selectedVehicleId:null, editingVehicleId:null, editingTripId:null, editingMaintenanceId:null, selectedPermissionUser:null, chatChannel:null, calendarDate:new Date(), orgEditMode:false };
+let state = { user:null, profile:null, permissions:{}, cards:[], items:[], notices:[], employees:[], employeeRegistry:[], orgTeams:[], privateMessages:[], privateReplies:[], selectedPrivateMessageId:null, chatMessages:[], messengerRooms:[], messengerMembers:[], selectedMessengerRoom:"global", calendarEntries:[], leaveAdjustments:[], purchaseRequests:[], contractorWorkforce:[], editingContractorId:null, companyEvents:[], meetingBookings:[], vehicles:[], vehicleTrips:[], vehicleMaintenance:[], selectedVehicleId:null, editingVehicleId:null, editingTripId:null, editingMaintenanceId:null, selectedPermissionUser:null, selectedPermissionUsers:[], chatChannel:null, calendarDate:new Date(), orgEditMode:false };
 
 const $ = id => document.getElementById(id);
 
@@ -426,14 +426,20 @@ function employeeLeaveStats(employeeId,grantedOverride=null){
   const weekendCredit=entries.filter(x=>x.event_type==="weekend_work").reduce((a,x)=>a+Number(x.days||0)*1.5,0);
   const compUsed=entries.filter(x=>x.event_type==="comp_used").reduce((a,x)=>a+Number(x.days||0),0);
   const adjustments=state.leaveAdjustments.filter(x=>x.employee_id===employeeId);
-  const annualAdjustment=adjustments.filter(x=>x.leave_type==="annual").reduce((a,x)=>a+Number(x.amount||0),0);
-  const compAdjustment=adjustments.filter(x=>x.leave_type==="comp").reduce((a,x)=>a+Number(x.amount||0),0);
+  const legacyAnnualAdjustment=adjustments.filter(x=>x.leave_type==="annual").reduce((a,x)=>a+Number(x.amount||0),0);
+  const legacyCompAdjustment=adjustments.filter(x=>x.leave_type==="comp").reduce((a,x)=>a+Number(x.amount||0),0);
+  const legacyAnnualBalance=granted+legacyAnnualAdjustment-annualUsed;
+  const legacyCompBalance=weekendCredit+legacyCompAdjustment-compUsed;
+  const useDirect=emp?.leave_balance_override===true;
+  const annualBalance=useDirect?Number(emp?.annual_leave_balance||0):legacyAnnualBalance;
+  const compBalance=useDirect?Number(emp?.comp_leave_balance||0):legacyCompBalance;
+  const annualAdjustment=annualBalance+annualUsed-granted;
+  const compAdjustment=compBalance+compUsed-weekendCredit;
   return {
-    granted,annualUsed,annualAdjustment,
-    annualBalance:granted+annualAdjustment-annualUsed,
+    granted,annualUsed,annualAdjustment,annualBalance,
     weekendCredit,compUsed,compAdjustment,
     compGranted:weekendCredit+compAdjustment,
-    compBalance:weekendCredit+compAdjustment-compUsed
+    compBalance
   };
 }
 
@@ -2053,17 +2059,15 @@ async function saveLeaveBalances(){
   if(!Number.isFinite(annualTarget)||annualTarget<0||!Number.isFinite(compTarget)||compTarget<0){
     toast("연차와 대휴 잔여일수를 올바르게 입력하세요.");return;
   }
-  const annualDelta=Number((annualTarget-current.annualBalance).toFixed(2));
-  const compDelta=Number((compTarget-current.compBalance).toFixed(2));
-  if(Math.abs(annualDelta)<0.001&&Math.abs(compDelta)<0.001){toast("변경된 잔여일수가 없습니다.");return}
+  if(Math.abs(annualTarget-current.annualBalance)<0.001&&Math.abs(compTarget-current.compBalance)<0.001){toast("변경된 잔여일수가 없습니다.");return}
 
   $("saveLeaveBalancesBtn").disabled=true;
   $("saveLeaveBalancesBtn").textContent="저장 중...";
   try{
     const {error}=await supabaseClient.rpc("admin_set_employee_leave_balances",{
       p_employee_id:employeeId,
-      p_annual_delta:annualDelta,
-      p_comp_delta:compDelta,
+      p_annual_delta:annualTarget,
+      p_comp_delta:compTarget,
       p_reason:reason
     });
     if(error){
@@ -2090,10 +2094,13 @@ async function quickLeaveAdjustment(type,delta){
   if(!employeeId){toast("가입 완료 직원을 선택하세요.");return}
   const reason=$("editLeaveAdjustmentReason").value.trim();
   if(!reason){toast("먼저 수정 사유를 입력하세요.");$("editLeaveAdjustmentReason").focus();return}
+  const current=employeeLeaveStats(employeeId,Number($("editAnnualLeave").value||0));
+  const annualTarget=type==="annual"?Number((current.annualBalance+Number(delta)).toFixed(2)):current.annualBalance;
+  const compTarget=type==="comp"?Number((current.compBalance+Number(delta)).toFixed(2)):current.compBalance;
   const {error}=await supabaseClient.rpc("admin_set_employee_leave_balances",{
     p_employee_id:employeeId,
-    p_annual_delta:type==="annual"?Number(delta):0,
-    p_comp_delta:type==="comp"?Number(delta):0,
+    p_annual_delta:annualTarget,
+    p_comp_delta:compTarget,
     p_reason:reason
   });
   if(error){
@@ -2293,13 +2300,21 @@ async function renderPermissions(){
   if(!state.selectedPermissionUser&&state.employees[0]){
     state.selectedPermissionUser=state.employees[0].id;
   }
+  if(!Array.isArray(state.selectedPermissionUsers))state.selectedPermissionUsers=[];
 
   $("permissionUsers").innerHTML=state.employees.map(x=>`
-    <div class="permission-user ${state.selectedPermissionUser===x.id?"active":""}"
-         onclick="selectPermissionUser('${x.id}')">
-      ${escapeHtml(x.name)}
+    <div class="permission-user ${state.selectedPermissionUser===x.id?"active":""} ${state.selectedPermissionUsers.includes(x.id)?"selected-bulk":""}">
+      <input type="checkbox" class="permission-user-check" data-user-id="${x.id}"
+             ${state.selectedPermissionUsers.includes(x.id)?"checked":""}
+             ${x.is_super_admin?"disabled title=\"최고관리자는 권한을 일괄 변경할 수 없습니다\"":""}>
+      <span class="permission-user-name" onclick="selectPermissionUser('${x.id}')">${escapeHtml(x.name)}</span>
       <small>${escapeHtml(x.position||"")}</small>
     </div>`).join("");
+
+  document.querySelectorAll(".permission-user-check").forEach(box=>{
+    box.onchange=()=>togglePermissionUserSelection(box.dataset.userId,box.checked);
+  });
+  updatePermissionUserSelectionCount();
 
   const selected=state.employees.find(x=>x.id===state.selectedPermissionUser);
   if(!selected)return;
@@ -2318,10 +2333,16 @@ async function renderPermissions(){
   }
 
   const p=data||{};
+  const bulkCount=state.selectedPermissionUsers.filter(id=>{
+    const employee=state.employees.find(x=>x.id===id);
+    return employee&&!employee.is_super_admin;
+  }).length;
 
   $("permissionNotice").innerHTML=isSuper
     ? `<b>${escapeHtml(selected.name)}</b>님은 최고관리자입니다. 최고관리자는 시스템 보호를 위해 항상 모든 권한을 가집니다.`
-    : `<b>${escapeHtml(selected.name)}</b>님의 권한을 세부적으로 설정할 수 있습니다. 체크하지 않은 메뉴는 로그인 후 보이지 않습니다.`;
+    : bulkCount>0
+      ? `<b>${bulkCount}명 선택됨.</b> 아래 권한을 체크한 후 ‘선택 직원 권한 저장’을 누르면 체크한 직원 모두에게 똑같이 적용됩니다. 왼쪽 직원 이름을 클릭하면 그 직원의 현재 권한을 불러옵니다.`
+      : `<b>${escapeHtml(selected.name)}</b>님의 권한을 세부적으로 설정할 수 있습니다. 여러 명에게 같은 권한을 주려면 왼쪽 체크박스로 직원을 선택하세요.`;
 
   $("permissionChecks").innerHTML=PERMISSION_DEFS.map(([k,l])=>`
     <div class="perm">
@@ -2334,10 +2355,10 @@ async function renderPermissions(){
       </label>
     </div>`).join("");
 
-  $("savePermissionBtn").disabled=isSuper;
-  $("basicPermissionBtn").disabled=isSuper;
-  $("clearPermissionBtn").disabled=isSuper;
-  $("allPermissionBtn").disabled=isSuper;
+  $("savePermissionBtn").disabled=isSuper&&bulkCount===0;
+  $("basicPermissionBtn").disabled=isSuper&&bulkCount===0;
+  $("clearPermissionBtn").disabled=isSuper&&bulkCount===0;
+  $("allPermissionBtn").disabled=isSuper&&bulkCount===0;
 }
 
 window.selectPermissionUser=async id=>{
@@ -2345,9 +2366,40 @@ window.selectPermissionUser=async id=>{
   await renderPermissions();
 };
 
+function updatePermissionUserSelectionCount(){
+  const count=(state.selectedPermissionUsers||[]).filter(id=>{
+    const e=state.employees.find(x=>x.id===id);
+    return e&&!e.is_super_admin;
+  }).length;
+  if($("selectedPermissionUserCount"))$("selectedPermissionUserCount").textContent=`선택 ${count}명`;
+}
+
+function togglePermissionUserSelection(id,checked){
+  const employee=state.employees.find(x=>x.id===id);
+  if(!employee||employee.is_super_admin)return;
+  const set=new Set(state.selectedPermissionUsers||[]);
+  checked?set.add(id):set.delete(id);
+  state.selectedPermissionUsers=[...set];
+  updatePermissionUserSelectionCount();
+  const row=document.querySelector(`.permission-user-check[data-user-id="${id}"]`)?.closest(".permission-user");
+  if(row)row.classList.toggle("selected-bulk",checked);
+  const count=state.selectedPermissionUsers.length;
+  if(count>0)$("permissionNotice").innerHTML=`<b>${count}명 선택됨.</b> 체크한 권한을 선택 직원 모두에게 적용할 수 있습니다.`;
+}
+
+function selectAllPermissionUsers(){
+  state.selectedPermissionUsers=state.employees.filter(x=>!x.is_super_admin).map(x=>x.id);
+  renderPermissions();
+}
+function clearPermissionUsers(){
+  state.selectedPermissionUsers=[];
+  renderPermissions();
+}
+
 function setPermissionPreset(mode){
   const selected=state.employees.find(x=>x.id===state.selectedPermissionUser);
-  if(!selected||selected.is_super_admin)return;
+  const hasBulk=(state.selectedPermissionUsers||[]).length>0;
+  if(!hasBulk&&(!selected||selected.is_super_admin))return;
 
   document.querySelectorAll("[data-perm]").forEach(box=>{
     if(mode==="all")box.checked=true;
@@ -2358,13 +2410,15 @@ function setPermissionPreset(mode){
 
 async function savePermissions(){
   const selected=state.employees.find(x=>x.id===state.selectedPermissionUser);
-  if(!selected){
-    toast("직원을 선택하세요.");
-    return;
-  }
-  if(selected.is_super_admin){
-    toast("최고관리자는 항상 모든 권한을 가집니다.");
-    return;
+  const targets=(state.selectedPermissionUsers||[]).filter(id=>{
+    const e=state.employees.find(x=>x.id===id);
+    return e&&!e.is_super_admin;
+  });
+
+  if(targets.length===0){
+    if(!selected){toast("직원을 선택하세요.");return;}
+    if(selected.is_super_admin){toast("최고관리자는 항상 모든 권한을 가집니다.");return;}
+    targets.push(selected.id);
   }
 
   const permissionValues={};
@@ -2372,18 +2426,89 @@ async function savePermissions(){
     permissionValues[x.dataset.perm]=x.checked;
   });
 
-  const {error}=await supabaseClient.rpc("admin_save_user_permissions",{
-    p_user_id:state.selectedPermissionUser,
-    p_permissions:permissionValues
-  });
-
-  if(error){
-    toast("권한 저장 실패: "+error.message);
-    return;
+  $("savePermissionBtn").disabled=true;
+  $("savePermissionBtn").textContent="저장 중...";
+  try{
+    const {data,error}=await supabaseClient.rpc("admin_save_user_permissions_batch",{
+      p_user_ids:targets,
+      p_permissions:permissionValues
+    });
+    if(error){
+      // 이전 SQL만 적용된 환경에서도 한 명씩 저장되도록 호환
+      if(error.message&&error.message.includes("admin_save_user_permissions_batch")){
+        for(const userId of targets){
+          const {error:singleError}=await supabaseClient.rpc("admin_save_user_permissions",{
+            p_user_id:userId,
+            p_permissions:permissionValues
+          });
+          if(singleError)throw singleError;
+        }
+      }else throw error;
+    }
+    const names=targets.map(id=>state.employees.find(x=>x.id===id)?.name).filter(Boolean);
+    toast(`${names.length}명의 권한을 저장했습니다.`);
+    state.selectedPermissionUsers=[];
+    await renderPermissions();
+  }catch(error){
+    toast("권한 저장 실패: "+(error.message||error));
+  }finally{
+    $("savePermissionBtn").disabled=false;
+    $("savePermissionBtn").textContent="선택 직원 권한 저장";
   }
+}
 
-  toast(`${selected.name}님의 권한을 저장했습니다.`);
-  await renderPermissions();
+function normalizeBackupRows(rows){
+  return (rows||[]).map(row=>{
+    const clean={};
+    Object.entries(row||{}).forEach(([key,value])=>{
+      if(value===null||value===undefined)clean[key]="";
+      else if(typeof value==="object")clean[key]=JSON.stringify(value);
+      else clean[key]=value;
+    });
+    return clean;
+  });
+}
+
+async function exportAllCompanyData(){
+  if(!has("permissions_manage")){toast("전체 자료 백업 권한이 없습니다.");return;}
+  if(!window.XLSX){toast("엑셀 모듈을 불러오지 못했습니다.");return;}
+  const tables=[
+    ["직원정보","profiles"],["직원권한","user_permissions"],["직원등록대장","employee_registry"],
+    ["조직팀","organization_teams"],["공지사항","notices"],["법인카드사용","corporate_card_expenses"],
+    ["영수증","receipts"],["물품목록","inventory_items"],["재고거래","inventory_transactions"],
+    ["구매요청","purchase_requests"],["근무휴무달력","work_calendar_entries"],["외주인력","contractor_workforce"],
+    ["회사행사","company_events"],["회의실예약","meeting_room_bookings"],["차량목록","fleet_vehicles"],
+    ["차량운행일지","vehicle_trip_logs"],["차량정비","vehicle_maintenance"],["전체소통방","chat_messages"],
+    ["직원대화방","messenger_rooms"],["직원대화메시지","messenger_messages"],
+    ["비밀소통","private_messages"],["비밀소통답장","private_message_replies"],
+    ["연차조정이력","employee_leave_adjustments"],["연차직접변경이력","employee_leave_balance_history"]
+  ];
+  const wb=XLSX.utils.book_new();
+  const summary=[{
+    "백업일시":new Date().toLocaleString("ko-KR"),
+    "백업자":state.profile?.name||"",
+    "사원번호":state.profile?.emp_no||"",
+    "설명":"Supabase RLS 정책상 현재 로그인 계정이 조회 가능한 자료만 포함됩니다. 비밀번호와 Supabase Auth 정보는 포함하지 않습니다."
+  }];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(summary),"백업안내");
+
+  const failures=[];
+  for(const [sheet,table] of tables){
+    try{
+      const {data,error}=await supabaseClient.from(table).select("*");
+      if(error){failures.push(`${table}: ${error.message}`);continue;}
+      const rows=normalizeBackupRows(data);
+      const ws=rows.length?XLSX.utils.json_to_sheet(rows):XLSX.utils.aoa_to_sheet([["자료 없음"]]);
+      XLSX.utils.book_append_sheet(wb,ws,sheet.slice(0,31));
+    }catch(error){failures.push(`${table}: ${error.message||error}`);}
+  }
+  if(failures.length){
+    const ws=XLSX.utils.aoa_to_sheet([["일부 자료를 불러오지 못했습니다."],...failures.map(x=>[x])]);
+    XLSX.utils.book_append_sheet(wb,ws,"백업오류");
+  }
+  const stamp=new Date().toISOString().slice(0,10).replaceAll("-","");
+  XLSX.writeFile(wb,`서린컴퍼니_전체자료백업_${stamp}.xlsx`);
+  toast(`전체 자료 엑셀 백업을 만들었습니다.${failures.length?` (${failures.length}개 항목은 권한/테이블 문제로 제외)`:""}`);
 }
 
 $("loginBtn").onclick=login;$("logoutBtn").onclick=logout;
@@ -2400,7 +2525,7 @@ $("cardReceiptFile").onchange=e=>{
 $("saveItemBtn").onclick=saveItem;$("saveTxBtn").onclick=saveTx;$("exportInventoryBtn").onclick=exportInventory;
 $("savePurchaseBtn").onclick=savePurchase;$("purchaseStatusFilter").onchange=renderPurchases;$("refreshPurchaseBtn").onclick=async()=>{await loadPurchaseRequests();renderPurchases();toast("구매 내역을 새로고침했습니다.")};
 $("sendPrivateBtn").onclick=sendPrivate;
-$("savePermissionBtn").onclick=savePermissions;
+$("savePermissionBtn").onclick=savePermissions;$("selectAllPermissionUsersBtn").onclick=selectAllPermissionUsers;$("clearPermissionUsersBtn").onclick=clearPermissionUsers;$("exportAllDataBtn").onclick=exportAllCompanyData;
 $("basicPermissionBtn").onclick=()=>setPermissionPreset("basic");
 $("clearPermissionBtn").onclick=()=>setPermissionPreset("none");
 $("allPermissionBtn").onclick=()=>setPermissionPreset("all");

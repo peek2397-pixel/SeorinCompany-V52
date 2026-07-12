@@ -846,15 +846,22 @@
               <h3>직원별 화면 권한</h3>
               <small class="muted-text">직원을 선택한 뒤 필요한 권한만 체크하고 저장하세요.</small>
             </div>
-            <button id="savePermissionBtn" class="btn primary">권한 저장</button>
+            <div class="actions"><button id="exportAllDataBtn" class="btn">전체 자료 엑셀 백업</button><button id="savePermissionBtn" class="btn primary">선택 직원 권한 저장</button></div>
           </div>
 
           <div id="permissionNotice" class="privacy-note"></div>
 
-          <div class="permission-presets">
-            <button id="basicPermissionBtn" class="btn">기본 권한</button>
-            <button id="clearPermissionBtn" class="btn">전체 해제</button>
-            <button id="allPermissionBtn" class="btn">전체 선택</button>
+          <div class="permission-bulk-bar">
+            <div class="permission-presets">
+              <button id="basicPermissionBtn" class="btn">기본 권한</button>
+              <button id="clearPermissionBtn" class="btn">전체 해제</button>
+              <button id="allPermissionBtn" class="btn">전체 선택</button>
+            </div>
+            <div class="permission-user-actions">
+              <button id="selectAllPermissionUsersBtn" class="btn">직원 전체 선택</button>
+              <button id="clearPermissionUsersBtn" class="btn">직원 선택 해제</button>
+              <b id="selectedPermissionUserCount">선택 0명</b>
+            </div>
           </div>
 
           <div class="permission-layout">
