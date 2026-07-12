@@ -309,7 +309,7 @@
             <div class="panel-head"><h3>1:1 비밀소통 작성</h3></div>
             <div class="form-grid">
               <label>제목<input id="privateTitle" /></label>
-              <label>받는 사람<select id="privateRecipient"></select></label>
+              <label>받는 사람<input id="privateRecipientName" value="손동오 이사" readonly /><input id="privateRecipient" type="hidden" /></label>
               <label class="span-2">내용<textarea id="privateContent"></textarea></label>
             </div>
             <button id="sendPrivateBtn" class="btn primary">비공개로 보내기</button>
@@ -323,10 +323,10 @@
 
       <section id="corporateCardPage" class="page">
         <div class="panel">
-          <div class="panel-head"><h3>법인카드 사용 등록</h3></div>
+          <div class="panel-head"><h3>법인카드 사용 등록</h3></div><div class="notice-box"><b>등록 법인카드 4장</b><span>손동오 이사 · 이찬규 차장 · 신태선 대리 · 엄수현 주임</span></div>
           <div class="form-grid">
             <label>사용날짜<input id="cardDate" type="date" /></label>
-            <label>카드소유자<input id="cardOwner" /></label>
+            <label>카드소유자<select id="cardOwner"><option value="">카드 선택</option><option>손동오 이사</option><option>이찬규 차장</option><option>신태선 대리</option><option>엄수현 주임</option></select></label>
             <label>실사용자<input id="cardUser" /></label>
             <label>계정과목<select id="cardAccount"><option>주유</option><option>식대</option><option>물류용품</option><option>주차비</option><option>통행료</option><option>기타</option></select></label>
             <label>사용처<input id="cardVendor" /></label>

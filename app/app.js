@@ -33,6 +33,18 @@ let state = { user:null, profile:null, permissions:{}, cards:[], items:[], notic
 
 const $ = id => document.getElementById(id);
 
+window.addEventListener("error",e=>{
+  console.error("화면 스크립트 오류",e.error||e.message);
+  const t=document.getElementById("toast");
+  if(t){t.textContent="화면 오류: "+(e.message||"알 수 없는 오류");t.classList.add("show");}
+});
+window.addEventListener("unhandledrejection",e=>{
+  console.error("비동기 처리 오류",e.reason);
+  const msg=e.reason?.message||String(e.reason||"알 수 없는 오류");
+  const t=document.getElementById("toast");
+  if(t){t.textContent="처리 오류: "+msg;t.classList.add("show");}
+});
+
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 
 function makeTemporaryAuthClient(){
@@ -588,12 +600,12 @@ function renderMessengerEmployeePicker(){
   const type=$("messengerRoomType")?.value||"direct";
   const oldSelected=new Set([...document.querySelectorAll("[name='messengerEmployee']:checked")].map(x=>x.value));
   const rows=messengerAvailableEmployees().filter(e=>
-    !q||[e.name,e.team,e.department,e.position,e.employee_no].some(v=>String(v||"").toLowerCase().includes(q))
+    !q||[e.name,e.team,e.department,e.position,e.emp_no].some(v=>String(v||"").toLowerCase().includes(q))
   );
   box.innerHTML=rows.map(e=>`<label class="messenger-employee-row">
     <input type="${type==="direct"?"radio":"checkbox"}" name="messengerEmployee" value="${e.id}" ${oldSelected.has(e.id)?"checked":""}>
     <span class="messenger-employee-avatar">${escapeHtml((e.name||"?").slice(0,1))}</span>
-    <span class="messenger-employee-info"><b>${escapeHtml(e.name||"직원")}</b><small>${escapeHtml([e.team||e.department,e.position,e.employee_no].filter(Boolean).join(" · "))}</small></span>
+    <span class="messenger-employee-info"><b>${escapeHtml(e.name||"직원")}</b><small>${escapeHtml([e.team||e.department,e.position,e.emp_no].filter(Boolean).join(" · "))}</small></span>
   </label>`).join("")||`<div class="empty">검색된 직원이 없습니다.</div>`;
   box.querySelectorAll("[name='messengerEmployee']").forEach(x=>x.onchange=()=>{
     updateMessengerSelectedCount();
@@ -631,7 +643,7 @@ async function showMessengerMembers(){
   if((state.selectedMessengerRoom||"global")==="global")return;
   const {data,error}=await supabaseClient.rpc("messenger_room_members",{p_room_id:state.selectedMessengerRoom});
   if(error){toast("참여자를 불러오지 못했습니다.");return}
-  $("messengerMembersList").innerHTML=(data||[]).map(e=>`<div class="list-item"><b>${escapeHtml(e.name||"직원")}</b><small>${escapeHtml([e.team,e.position,e.employee_no].filter(Boolean).join(" · "))}</small></div>`).join("");
+  $("messengerMembersList").innerHTML=(data||[]).map(e=>`<div class="list-item"><b>${escapeHtml(e.name||"직원")}</b><small>${escapeHtml([e.team,e.position,e.emp_no].filter(Boolean).join(" · "))}</small></div>`).join("");
   $("messengerMembersModal").classList.remove("hidden");
 }
 
@@ -2101,13 +2113,26 @@ function openSelectedPermission(){
   const id=$("editEmployeeId").value;if(!id){toast("직원을 선택하세요.");return}
   state.selectedPermissionUser=id;goPage("permissions");renderPermissions();
 }
+function findDirectorProfile(){
+  return state.employees.find(x=>String(x.emp_no||"").toUpperCase()==="EMP001")
+    || state.employees.find(x=>x.name==="손동오")
+    || state.employees.find(x=>x.is_super_admin);
+}
 async function sendPrivate(){
-  const recipient=$("privateRecipient").value,title=$("privateTitle").value.trim(),content=$("privateContent").value.trim();if(!recipient||!title||!content){toast("받는 사람, 제목, 내용을 입력하세요.");return}
-  const {error}=await supabaseClient.from("private_messages").insert({sender_id:state.user.id,recipient_id:recipient,title,content});if(error){toast(error.message);return}
-  toast("비공개 메시지를 보냈습니다.");await loadPrivateMessages();renderPrivate();
+  const director=findDirectorProfile();
+  const recipient=director?.id||"";
+  const title=$("privateTitle").value.trim(),content=$("privateContent").value.trim();
+  if(!recipient){toast("손동오 이사 계정을 찾지 못했습니다. V52.1 SQL을 먼저 실행하세요.");return}
+  if(!title||!content){toast("제목과 내용을 입력하세요.");return}
+  const {error}=await supabaseClient.from("private_messages").insert({sender_id:state.user.id,recipient_id:recipient,title,content});
+  if(error){toast("비밀소통 전송 실패: "+error.message);return}
+  $("privateTitle").value="";$("privateContent").value="";
+  toast("손동오 이사에게 비공개로 보냈습니다.");await loadPrivateMessages();renderPrivate();
 }
 function renderPrivate(){
-  $("privateRecipient").innerHTML=state.employees.filter(x=>x.id!==state.user?.id&&(x.can_receive_private||x.is_super_admin)).map(x=>`<option value="${x.id}">${escapeHtml(x.name)} ${escapeHtml(x.position||"")}</option>`).join("");
+  const director=findDirectorProfile();
+  if($("privateRecipient"))$("privateRecipient").value=director?.id||"";
+  if($("privateRecipientName"))$("privateRecipientName").value=director?`${director.name||"손동오"} ${director.position||"이사"}`:"손동오 이사";
   $("privateList").innerHTML=state.privateMessages.map(x=>`<div class="list-item"><b>${escapeHtml(x.title)}</b><small>${new Date(x.created_at).toLocaleString("ko-KR")} · ${x.is_answered?"답변완료":"확인중"}</small><p>${escapeHtml(x.content)}</p></div>`).join("")||`<div class="empty">비밀소통 내역 없음</div>`;
 }
 async function renderPermissions(){
@@ -2302,8 +2327,8 @@ function renderVehicles(){
 }
 window.selectVehicle=id=>{state.selectedVehicleId=id;if($("tripVehicle"))$("tripVehicle").value=id;if($("maintenanceVehicle"))$("maintenanceVehicle").value=id;renderVehicles()}
 window.editVehicle=id=>{const v=state.vehicles.find(x=>x.id===id);if(!v)return;state.selectedVehicleId=id;state.editingVehicleId=id;$("vehicleName").value=v.vehicle_name||"";$("vehicleNumber").value=v.vehicle_number||"";$("vehicleManager").value=v.manager_name||"";$("vehicleMileage").value=v.current_mileage||0;$("vehicleInspection").value=v.inspection_expiry||"";$("vehicleStatus").value=v.status||"운행가능";$("vehicleMemo").value=v.memo||"";activateVehicleTab("basic")}
-function clearVehicle(){state.editingVehicleId=null;["vehicleName","vehicleNumber","vehicleManager","vehicleInsurance","vehicleInspection","vehicleMemo"].forEach(id=>$(id).value="");$("vehicleMileage").value=0;$("vehicleStatus").value="운행가능"}
-async function saveVehicle(){if(!has("employees_manage")&&!state.profile?.is_super_admin){toast("관리자만 차량을 수정할 수 있습니다.");return}const row={vehicle_name:$("vehicleName").value.trim(),vehicle_number:$("vehicleNumber").value.trim(),manager_name:$("vehicleManager").value.trim(),current_mileage:Number($("vehicleMileage").value||0),inspection_expiry:$("vehicleInspection").value||null,status:$("vehicleStatus").value,memo:$("vehicleMemo").value.trim(),updated_at:new Date().toISOString()};if(!row.vehicle_name||!row.vehicle_number){toast("차량명과 차량번호를 입력하세요.");return}let error;if(state.editingVehicleId)({error}=await supabaseClient.from("fleet_vehicles").update(row).eq("id",state.editingVehicleId));else ({error}=await supabaseClient.from("fleet_vehicles").insert(row));if(error){toast("차량 저장 실패: "+error.message);return}await loadVehicles();clearVehicle();renderVehicles();toast("차량 정보를 저장했습니다.")}
+function clearVehicle(){state.editingVehicleId=null;["vehicleName","vehicleNumber","vehicleManager","vehicleInspection","vehicleMemo"].forEach(id=>{if($(id))$(id).value=""});$("vehicleMileage").value=0;$("vehicleStatus").value="운행가능"}
+async function saveVehicle(){if(!has("employees_manage")&&!state.profile?.is_super_admin){toast("관리자만 차량을 수정할 수 있습니다.");return}const row={vehicle_name:$("vehicleName").value.trim(),vehicle_number:$("vehicleNumber").value.trim(),manager_name:$("vehicleManager").value.trim(),current_mileage:Number($("vehicleMileage").value||0),inspection_expiry:$("vehicleInspection").value||null,status:$("vehicleStatus").value,memo:$("vehicleMemo").value.trim(),updated_at:new Date().toISOString()};if(!row.vehicle_name||!row.vehicle_number){toast("차량명과 차량번호를 입력하세요.");return}let error;if(state.editingVehicleId)({error}=await supabaseClient.from("fleet_vehicles").update(row).eq("id",state.editingVehicleId));else ({error}=await supabaseClient.from("fleet_vehicles").upsert(row,{onConflict:"vehicle_number"}));if(error){toast("차량 저장 실패: "+error.message);return}await loadVehicles();clearVehicle();renderVehicles();toast("차량 정보를 저장했습니다.")}
 async function deleteSelectedVehicle(){const v=selectedVehicle();if(!v){toast("삭제할 차량을 선택하세요.");return}if(!has("employees_manage")&&!state.profile?.is_super_admin){toast("관리자만 차량을 삭제할 수 있습니다.");return}if(!confirm(`${v.vehicle_name} ${v.vehicle_number} 차량과 연결된 운행·정비 기록을 모두 삭제할까요?`))return;const {error}=await supabaseClient.from("fleet_vehicles").delete().eq("id",v.id);if(error){toast("차량 삭제 실패: "+error.message);return}state.selectedVehicleId=null;await Promise.all([loadVehicles(),loadVehicleTrips(),loadVehicleMaintenance()]);renderVehicles();clearVehicle();toast("차량을 삭제했습니다.")}
 
 function clearVehicleTrip(){state.editingTripId=null;["tripDepartment","tripDriver","tripStartPlace","tripEndPlace","tripPurpose","tripMemo"].forEach(id=>$(id).value="");["tripDistance","tripOdometer","tripFuelCost"].forEach(id=>$(id).value=0);$("tripDate").value=isoDateOffset(0)}
@@ -2320,7 +2345,57 @@ function renderVehicleMaintenance(){if(!$("vehicleMaintenanceTable"))return;cons
 function vehicleLabel(id){const v=state.vehicles.find(x=>x.id===id);return v?`${v.vehicle_name} ${v.vehicle_number}`:"차량"}
 function renderVehicleAlerts(){if(!$("vehicleAlertList"))return;const soon=isoDateOffset(30);let a=[];state.vehicles.forEach(v=>{if(v.inspection_expiry&&v.inspection_expiry<=soon)a.push(`${v.vehicle_name} 검사 만료 ${v.inspection_expiry}`)});state.vehicleMaintenance.forEach(m=>{if(m.next_due_date&&m.next_due_date<=soon)a.push(`${vehicleLabel(m.vehicle_id)} ${m.maintenance_type} 예정 ${m.next_due_date}`)});$("vehicleAlertList").innerHTML=a.map(x=>`<div class="list-item"><b>${escapeHtml(x)}</b></div>`).join("")||`<div class="empty">30일 이내 차량 알림이 없습니다.</div>`}
 function vehicleWorkbookRows(vehicleId=null){const vehicles=vehicleId?state.vehicles.filter(v=>v.id===vehicleId):state.vehicles;const trips=state.vehicleTrips.filter(x=>!vehicleId||x.vehicle_id===vehicleId);const maint=state.vehicleMaintenance.filter(x=>!vehicleId||x.vehicle_id===vehicleId);return {vehicles,trips,maint}}
-function exportVehicleExcel(vehicleId=null){if(!window.XLSX){toast("엑셀 기능을 불러오지 못했습니다.");return}const data=vehicleWorkbookRows(vehicleId);const wb=XLSX.utils.book_new();const basics=data.vehicles.map(v=>({차량명:v.vehicle_name,차량번호:v.vehicle_number,담당자:v.manager_name||"",현재주행거리:v.current_mileage||0,검사만료일:v.inspection_expiry||"",상태:v.status||"",비고:v.memo||""}));const trips=data.trips.map(x=>({연월일:x.trip_date,차종:state.vehicles.find(v=>v.id===x.vehicle_id)?.vehicle_name||"",차량번호:state.vehicles.find(v=>v.id===x.vehicle_id)?.vehicle_number||"",부서:x.department||"",성명:x.driver_name||"",출발지명:x.start_place||"",도착지명:x.end_place||"",주소_목적:x.purpose_address||"",주행km:x.distance_km||0,최종km:x.odometer_km||0,주유금액:x.fuel_cost||0,메모:x.memo||""}));const maint=data.maint.map(x=>({정비일:x.maintenance_date,차량:vehicleLabel(x.vehicle_id),정비항목:x.maintenance_type,당시주행거리:x.mileage_km||0,정비업체:x.shop_name||"",비용:x.cost||0,다음예정일:x.next_due_date||"",다음예정km:x.next_due_mileage||"",메모:x.memo||""}));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(basics),"차량기본정보");XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(trips),"운행일지");XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(maint),"정비수리이력");const v=vehicleId?state.vehicles.find(x=>x.id===vehicleId):null;XLSX.writeFile(wb,v?`${v.vehicle_name}_${v.vehicle_number}_차량관리_${isoDateOffset(0)}.xlsx`:`서린컴퍼니_전체차량관리_${isoDateOffset(0)}.xlsx`)}
+function exportVehicleExcel(vehicleId=null){
+  if(!window.XLSX){toast("엑셀 기능을 불러오지 못했습니다.");return}
+  const data=vehicleWorkbookRows(vehicleId);
+  const wb=XLSX.utils.book_new();
+  const targets=vehicleId?data.vehicles:state.vehicles;
+
+  const safeSheetName=name=>String(name||"차량").replace(/[\\/?*\[\]:]/g," ").slice(0,31);
+  const applyWidths=(ws,widths)=>{ws["!cols"]=widths.map(w=>({wch:w}))};
+  const border={top:{style:"thin",color:{rgb:"000000"}},bottom:{style:"thin",color:{rgb:"000000"}},left:{style:"thin",color:{rgb:"000000"}},right:{style:"thin",color:{rgb:"000000"}}};
+  const styleRange=(ws,range,style)=>{const r=XLSX.utils.decode_range(range);for(let R=r.s.r;R<=r.e.r;R++)for(let C=r.s.c;C<=r.e.c;C++){const a=XLSX.utils.encode_cell({r:R,c:C});if(ws[a])ws[a].s={...(ws[a].s||{}),...style};}};
+
+  targets.forEach((v,idx)=>{
+    const trips=state.vehicleTrips.filter(x=>x.vehicle_id===v.id).sort((a,b)=>String(a.trip_date).localeCompare(String(b.trip_date)));
+    const firstKm=trips.length?Number(trips[0].odometer_km||0)-Number(trips[0].distance_km||0):Number(v.current_mileage||0);
+    const rows=[];
+    rows.push(["업무용 차량 일지","","","","","","","","","",""]);
+    rows.push(["","","","","","","","","","",""]);
+    rows.push(["1. 기본 정보 ","","","","","","","","","",""]);
+    rows.push(["①차종",v.vehicle_name||"","","","②차량번호",v.vehicle_number||"","","","","",""]);
+    rows.push(["담당자",v.manager_name||"","","","현재 주행거리",Number(v.current_mileage||0),"","","검사 만료일",v.inspection_expiry||"",""]);
+    rows.push(["","","","","","","","","","",""]);
+    rows.push(["2. 차량 운행기록 내역","","","","","","","","최초 km : "+Number(firstKm||0).toLocaleString(),"",""]);
+    rows.push(["년도","월","일","부서","성명","출발지명","도착지명","주소 또는 목적","주행km","최종km\n(계기판)","주유기록\n(금액)"]);
+    trips.forEach(x=>{
+      const d=new Date(x.trip_date+"T00:00:00");
+      rows.push([d.getFullYear(),d.getMonth()+1,d.getDate(),x.department||"",x.driver_name||"",x.start_place||"",x.end_place||"",x.purpose_address||"",Number(x.distance_km||0),Number(x.odometer_km||0),Number(x.fuel_cost||0)]);
+    });
+    if(!trips.length)for(let i=0;i<20;i++)rows.push(["","","","","","","","","","",""]);
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws["!merges"]=[XLSX.utils.decode_range("A1:K1"),XLSX.utils.decode_range("A3:K3"),XLSX.utils.decode_range("A7:H7")];
+    applyWidths(ws,[8,7,7,12,12,18,18,30,11,13,14]);
+    ws["!rows"]=[{hpt:28},{hpt:8},{hpt:22},{hpt:22},{hpt:22},{hpt:8},{hpt:22},{hpt:36}];
+    styleRange(ws,"A1:K1",{font:{bold:true,sz:16},alignment:{horizontal:"center",vertical:"center"}});
+    styleRange(ws,"A3:K3",{font:{bold:true,sz:12},fill:{fgColor:{rgb:"D9EAF7"}},border});
+    styleRange(ws,"A4:K5",{border,alignment:{vertical:"center"}});
+    styleRange(ws,"A7:K7",{font:{bold:true,sz:12},fill:{fgColor:{rgb:"D9EAF7"}},border});
+    styleRange(ws,"A8:K"+rows.length,{border,alignment:{horizontal:"center",vertical:"center",wrapText:true}});
+    styleRange(ws,"A8:K8",{font:{bold:true},fill:{fgColor:{rgb:"EDEDED"}},border,alignment:{horizontal:"center",vertical:"center",wrapText:true}});
+    for(let r=9;r<=rows.length;r++){const c=ws["K"+r];if(c)c.z='#,##0"원"';const i=ws["I"+r];if(i)i.z='0.0';const j=ws["J"+r];if(j)j.z='#,##0';}
+    ws["!autofilter"]={ref:"A8:K"+rows.length};
+    ws["!freeze"]={xSplit:0,ySplit:8};
+    XLSX.utils.book_append_sheet(wb,ws,safeSheetName((v.vehicle_name||"차량")+"_"+(v.vehicle_number||idx+1)));
+  });
+
+  const maintRows=[["정비일","차량명","차량번호","정비 항목","당시 주행거리","정비업체","비용","다음 교체 예정일","다음 교체 예정 주행거리","메모"]];
+  data.maint.sort((a,b)=>String(a.maintenance_date).localeCompare(String(b.maintenance_date))).forEach(x=>{const v=state.vehicles.find(z=>z.id===x.vehicle_id)||{};maintRows.push([x.maintenance_date,v.vehicle_name||"",v.vehicle_number||"",x.maintenance_type||"",Number(x.mileage_km||0),x.shop_name||"",Number(x.cost||0),x.next_due_date||"",Number(x.next_due_mileage||0)||"",x.memo||""])});
+  const mws=XLSX.utils.aoa_to_sheet(maintRows);applyWidths(mws,[13,14,14,15,16,18,14,17,22,30]);styleRange(mws,"A1:J"+Math.max(1,maintRows.length),{border,alignment:{vertical:"center",wrapText:true}});styleRange(mws,"A1:J1",{font:{bold:true},fill:{fgColor:{rgb:"EDEDED"}},alignment:{horizontal:"center",vertical:"center",wrapText:true},border});mws["!autofilter"]={ref:"A1:J"+Math.max(1,maintRows.length)};XLSX.utils.book_append_sheet(wb,mws,"정비관리");
+
+  const v=vehicleId?state.vehicles.find(x=>x.id===vehicleId):null;
+  XLSX.writeFile(wb,v?`${v.vehicle_name}_${v.vehicle_number}_차량운행일지.xlsx`:`서린컴퍼니_전체차량운행일지.xlsx`,{cellStyles:true});
+}
 function activateVehicleTab(tab){document.querySelectorAll(".vehicle-tab").forEach(x=>x.classList.toggle("active",x.dataset.vtab===tab));$("vehicleBasicPanel").classList.toggle("hidden",tab!=="basic");$("vehicleTripPanel").classList.toggle("hidden",tab!=="trip");$("vehicleMaintenancePanel").classList.toggle("hidden",tab!=="maintenance")}
 
 function renderDashboardSchedule(){if(!$("dashboardScheduleList"))return;const today=isoDateOffset(0),tomorrow=isoDateOffset(1);let items=[];state.companyEvents.filter(x=>x.start_date<=tomorrow&&x.end_date>=today).forEach(x=>items.push({d:x.start_date,label:`${eventTypeLabel(x.event_type)} · ${x.title}`,meta:`${x.event_time||""} ${x.location||""}`}));state.meetingBookings.filter(x=>x.meeting_date>=today&&x.meeting_date<=tomorrow).forEach(x=>items.push({d:x.meeting_date,label:`회의 · ${x.title}`,meta:`${String(x.start_time).slice(0,5)} ${x.meeting_with||""}`}));items.sort((a,b)=>a.d.localeCompare(b.d));$("dashboardScheduleList").innerHTML=items.map(x=>`<div class="list-item"><b>${x.d===today?"오늘":"내일"} · ${escapeHtml(x.label)}</b><small>${escapeHtml(x.meta)}</small></div>`).join("")||`<div class="empty">오늘·내일 일정이 없습니다.</div>`}
@@ -2377,7 +2452,7 @@ $("editAnnualLeave").addEventListener("input",updateEmployeeLeavePreview);
 $("saveLeaveBalancesBtn").onclick=saveLeaveBalances;
 $("refreshLeaveHistoryBtn").onclick=async()=>{await loadLeaveAdjustments();updateEmployeeLeavePreview();renderEmployeeLeaveHistory();toast("연차·대휴 이력을 새로고침했습니다.")};
 document.querySelectorAll("[data-leave-type][data-delta]").forEach(btn=>btn.onclick=()=>quickLeaveAdjustment(btn.dataset.leaveType,Number(btn.dataset.delta)));
-$("cardDate").value=new Date().toISOString().slice(0,10);$("cardMonthFilter").value=new Date().toISOString().slice(0,7);
+$("cardDate").value=new Date().toISOString().slice(0,10);$("cardMonthFilter").value=new Date().toISOString().slice(0,7);if($("cardUser"))$("cardUser").value=state.profile?.name||"";
 $("calStart").value=new Date().toISOString().slice(0,10);$("calEnd").value=new Date().toISOString().slice(0,10);
 if($("contractorWorkDate"))$("contractorWorkDate").value=new Date().toISOString().slice(0,10);
 if($("contractorMonthFilter"))$("contractorMonthFilter").value=new Date().toISOString().slice(0,7);
@@ -2385,4 +2460,11 @@ if($("tripMonthFilter"))$("tripMonthFilter").value=new Date().toISOString().slic
 if($("maintenanceMonthFilter"))$("maintenanceMonthFilter").value=new Date().toISOString().slice(0,7);
 ["eventStartDate","eventEndDate","meetingDate","tripDate","maintenanceDate"].forEach(id=>{if($(id))$(id).value=isoDateOffset(0)});["eventMonthFilter","meetingMonthFilter"].forEach(id=>{if($(id))$(id).value=isoDateOffset(0).slice(0,7)});if($("meetingStart"))$("meetingStart").value="09:00";if($("meetingEnd"))$("meetingEnd").value="10:00";
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&!$("loginView").classList.contains("hidden"))login()});
+document.addEventListener("click",e=>{
+  const btn=e.target.closest("button");if(!btn)return;
+  if(btn.id==="newMessengerRoomBtn"){e.preventDefault();openMessengerRoomModal();}
+  if(btn.id==="saveVehicleBtn"){e.preventDefault();saveVehicle();}
+  if(btn.id==="saveLeaveBalancesBtn"){e.preventDefault();saveLeaveBalances();}
+  if(btn.matches("[data-leave-type][data-delta]")){e.preventDefault();quickLeaveAdjustment(btn.dataset.leaveType,Number(btn.dataset.delta));}
+});
 (async()=>{if(!configured)return;const {data}=await supabaseClient.auth.getSession();if(data.session){state.user=data.session.user;await loadProfile();showApp()}})();
