@@ -813,3 +813,23 @@ body.modal-open{overflow:hidden}
 .selected-vehicle-summary b{margin-top:5px;font-size:15px}
 @media(max-width:900px){.selected-vehicle-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.selected-vehicle-summary{grid-template-columns:1fr}.vehicle-main-tabs .vehicle-tab{flex:1}}
+
+/* V56 비밀소통 양방향 대화 */
+#privatePage .content-grid{grid-template-columns:minmax(420px,1fr) minmax(280px,.55fr) minmax(520px,1.2fr)}
+.private-thread-list{display:flex;flex-direction:column;gap:8px;max-height:620px;overflow:auto}
+.private-thread-item{width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:12px;cursor:pointer}
+.private-thread-item.active{border-color:#2276ff;background:#eef5ff}
+.private-thread-item b,.private-thread-item small,.private-thread-item span{display:block}
+.private-thread-item small,.private-thread-item span{color:var(--muted);margin-top:4px}
+.private-conversation-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:12px}
+.private-conversation-head h3{margin:0 0 4px}
+.status-badge{background:#eef5ff;color:#1459b8;padding:6px 10px;border-radius:999px;font-size:12px;white-space:nowrap}
+.private-chat-log{display:flex;flex-direction:column;gap:10px;max-height:430px;overflow:auto;padding:8px 2px}
+.private-chat-bubble{max-width:78%;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff}
+.private-chat-bubble.mine{align-self:flex-end;background:#eaf3ff;border-color:#bfd8ff}
+.private-chat-bubble.other{align-self:flex-start}
+.private-chat-bubble p{white-space:pre-wrap;margin:6px 0}
+.private-chat-bubble small{color:var(--muted)}
+.private-reply-box{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px}
+.private-reply-box textarea{min-height:84px}
+@media(max-width:1200px){#privatePage .content-grid{grid-template-columns:1fr}.private-chat-bubble{max-width:90%}}

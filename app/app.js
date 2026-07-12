@@ -33,13 +33,26 @@ const pageInfo = {
   permissions:["권한관리","직원별로 보이는 화면과 기능을 지정합니다."]
 };
 const menus = [
-  ["dashboard","대시보드","dashboard_view"],["notices","공지사항","notices_view"],["organization","조직도·비상연락망","organization_view"],
-  ["community","일반 소통방","community_view"],["private","1:1 비밀소통","private_messages_use"],
-  ["corporateCard","법인카드","card_use"],["inventory","물품관리","inventory_view"],["purchase","구매관리","purchase_view"],
-  ["b2b","B2B 작업 통계","b2b_view"],["calendar","근무·휴무 달력","calendar_use"],["events","회사 일정·B2C 행사","calendar_use"],["meetings","회의실 예약","calendar_use"],["contractors","외주 업체 인력관리","calendar_manage"],["vehicles","차량관리","dashboard_view"],["account","내 정보·비밀번호","dashboard_view"],
-  ["kpi","B2C KPI 관리","kpi_manage"],["employees","직원관리","employees_manage"],["permissions","권한관리","permissions_manage"]
+  ["dashboard","대시보드","dashboard_view"],
+  ["notices","공지사항","notices_view"],
+  ["organization","조직도·비상연락망","organization_view"],
+  ["community","일반 소통방","community_view"],
+  ["private","1:1 비밀소통","private_messages_use"],
+  ["corporateCard","법인카드","card_use"],
+  ["inventory","물품관리","inventory_view"],
+  ["purchase","구매관리","purchase_view"],
+  ["b2b","B2B 작업 통계","b2b_view"],
+  ["calendar","근무·휴무 달력","calendar_use"],
+  ["events","회사 일정·B2C 행사","events_view"],
+  ["meetings","회의실 예약","meetings_view"],
+  ["contractors","외주 업체 인력관리","contractors_view"],
+  ["vehicles","차량관리","vehicles_view"],
+  ["account","내 정보·비밀번호","account_view"],
+  ["kpi","B2C KPI 관리","kpi_view"],
+  ["employees","직원관리","employees_manage"],
+  ["permissions","권한관리","permissions_manage"]
 ];
-let state = { user:null, profile:null, permissions:{}, cards:[], items:[], notices:[], employees:[], employeeRegistry:[], orgTeams:[], privateMessages:[], chatMessages:[], messengerRooms:[], messengerMembers:[], selectedMessengerRoom:"global", calendarEntries:[], leaveAdjustments:[], purchaseRequests:[], contractorWorkforce:[], editingContractorId:null, companyEvents:[], meetingBookings:[], vehicles:[], vehicleTrips:[], vehicleMaintenance:[], selectedVehicleId:null, editingVehicleId:null, editingTripId:null, editingMaintenanceId:null, selectedPermissionUser:null, chatChannel:null, calendarDate:new Date(), orgEditMode:false };
+let state = { user:null, profile:null, permissions:{}, cards:[], items:[], notices:[], employees:[], employeeRegistry:[], orgTeams:[], privateMessages:[], privateReplies:[], selectedPrivateMessageId:null, chatMessages:[], messengerRooms:[], messengerMembers:[], selectedMessengerRoom:"global", calendarEntries:[], leaveAdjustments:[], purchaseRequests:[], contractorWorkforce:[], editingContractorId:null, companyEvents:[], meetingBookings:[], vehicles:[], vehicleTrips:[], vehicleMaintenance:[], selectedVehicleId:null, editingVehicleId:null, editingTripId:null, editingMaintenanceId:null, selectedPermissionUser:null, chatChannel:null, calendarDate:new Date(), orgEditMode:false };
 
 const $ = id => document.getElementById(id);
 
@@ -84,31 +97,41 @@ function has(key){return !!(state.profile?.is_super_admin || state.permissions?.
 
 const PERMISSION_DEFS=[
   ["dashboard_view","대시보드"],
-  ["notices_view","공지 보기"],
-  ["notices_manage","공지 관리"],
-  ["organization_view","조직도"],
-  ["emergency_contacts_view","비상 연락망"],
+  ["notices_view","공지사항"],
+  ["organization_view","조직도·비상연락망"],
   ["community_view","일반 소통방"],
   ["private_messages_use","1:1 비밀소통"],
-  ["card_use","법인카드 등록"],
+  ["card_use","법인카드"],
+  ["inventory_view","물품관리"],
+  ["purchase_view","구매관리"],
+  ["b2b_view","B2B 작업 통계"],
+  ["calendar_use","근무·휴무 달력"],
+  ["events_view","회사 일정·B2C 행사"],
+  ["meetings_view","회의실 예약"],
+  ["contractors_view","외주 업체 인력관리"],
+  ["vehicles_view","차량관리"],
+  ["account_view","내 정보·비밀번호"],
+  ["kpi_view","B2C KPI 관리"],
+  ["employees_manage","직원관리"],
+  ["permissions_manage","권한관리"],
+
+  ["notices_manage","공지사항 관리"],
+  ["emergency_contacts_view","비상연락처 전체 조회"],
   ["card_manage","법인카드 전체관리"],
   ["card_export","법인카드 엑셀"],
-  ["inventory_view","물품 조회"],
   ["inventory_manage","물품·재고 관리"],
   ["inventory_export","재고 엑셀"],
-  ["purchase_view","구매요청"],
   ["purchase_approve","구매 검토·발주"],
   ["purchase_final_approve","구매 최종 승인"],
-  ["calendar_use","근무·휴무 달력"],
-  ["calendar_manage","전체 직원 달력 조회"],
-  ["b2b_view","B2B 작업통계 보기"],
+  ["calendar_manage","전체 직원 달력 조회·대리 등록"],
+  ["events_manage","회사 일정 등록·수정"],
+  ["meetings_manage","회의실 예약 전체관리"],
+  ["contractors_manage","외주 업체 인력 전체관리"],
+  ["vehicles_manage","차량 등록·수정·삭제"],
   ["b2b_manage","B2B 전체관리·평가"],
   ["b2b_export","B2B 엑셀·백업"],
-  ["kpi_view","B2C KPI 메뉴"],
   ["kpi_manage","B2C KPI 평가"],
-  ["kpi_export","B2C KPI 엑셀"],
-  ["employees_manage","직원관리"],
-  ["permissions_manage","권한관리"]
+  ["kpi_export","B2C KPI 엑셀"]
 ];
 
 const BASIC_PERMISSIONS=new Set([
@@ -133,7 +156,7 @@ function renderMenu(){
   $("menu").innerHTML=menus.filter(m=>has(m[2])).map(([id,label])=>`<button class="nav-btn" data-page="${id}" onclick="goPage('${id}')">${label}</button>`).join("");
 }
 function goPage(id){
-  if(id==="kpi"&&!has("kpi_manage")){
+  if(id==="kpi"&&!has("kpi_view")){
     toast("B2C KPI는 관리자만 볼 수 있습니다.");
     return;
   }
@@ -424,7 +447,22 @@ async function loadOrgTeams(){
 async function loadPrivateMessages(){
   if(!has("private_messages_use"))return;
   const {data,error}=await supabaseClient.from("private_messages").select("*").order("created_at",{ascending:false}).limit(100);
-  if(!error)state.privateMessages=data||[];
+  if(error){toast("비밀소통 조회 실패: "+error.message);return}
+  state.privateMessages=data||[];
+  const ids=state.privateMessages.map(x=>x.id);
+  state.privateReplies=[];
+  if(ids.length){
+    const {data:replies,error:replyError}=await supabaseClient
+      .from("private_message_replies")
+      .select("*")
+      .in("message_id",ids)
+      .order("created_at",{ascending:true});
+    if(replyError){toast("비밀소통 답글 조회 실패: "+replyError.message)}
+    else state.privateReplies=replies||[];
+  }
+  if(state.selectedPrivateMessageId&&!state.privateMessages.some(x=>String(x.id)===String(state.selectedPrivateMessageId))){
+    state.selectedPrivateMessageId=null;
+  }
 }
 
 
@@ -955,7 +993,7 @@ function renderDashboard(){
 
   renderDashboardSchedule();
   const kpiShortcut=$("dashboardKpiShortcut");
-  if(kpiShortcut)kpiShortcut.classList.toggle("hidden",!has("kpi_manage"));
+  if(kpiShortcut)kpiShortcut.classList.toggle("hidden",!has("kpi_view"));
 }
 
 
@@ -2162,18 +2200,92 @@ async function sendPrivate(){
   const director=findDirectorProfile();
   const recipient=director?.id||"";
   const title=$("privateTitle").value.trim(),content=$("privateContent").value.trim();
-  if(!recipient){toast("손동오 이사 계정을 찾지 못했습니다. V52.1 SQL을 먼저 실행하세요.");return}
+  if(!recipient){toast("손동오 이사 계정을 찾지 못했습니다.");return}
   if(!title||!content){toast("제목과 내용을 입력하세요.");return}
-  const {error}=await supabaseClient.from("private_messages").insert({sender_id:state.user.id,recipient_id:recipient,title,content});
+  const {data,error}=await supabaseClient.from("private_messages")
+    .insert({sender_id:state.user.id,recipient_id:recipient,title,content,is_answered:false})
+    .select("id").single();
   if(error){toast("비밀소통 전송 실패: "+error.message);return}
   $("privateTitle").value="";$("privateContent").value="";
-  toast("손동오 이사에게 비공개로 보냈습니다.");await loadPrivateMessages();renderPrivate();
+  state.selectedPrivateMessageId=data?.id||null;
+  toast("손동오 이사에게 비공개로 보냈습니다.");
+  await loadPrivateMessages();renderPrivate();
+}
+function selectPrivateMessage(id){
+  state.selectedPrivateMessageId=id;
+  renderPrivate();
+}
+async function sendPrivateReply(){
+  const thread=state.privateMessages.find(x=>String(x.id)===String(state.selectedPrivateMessageId));
+  if(!thread){toast("답장할 비밀소통을 선택하세요.");return}
+  const input=$("privateReplyContent");
+  const content=(input?.value||"").trim();
+  if(!content){toast("답장 내용을 입력하세요.");return}
+  const {error}=await supabaseClient.from("private_message_replies").insert({
+    message_id:thread.id,
+    sender_id:state.user.id,
+    content
+  });
+  if(error){toast("답장 전송 실패: "+error.message);return}
+  const isRecipient=thread.recipient_id===state.user.id;
+  await supabaseClient.from("private_messages").update({
+    is_answered:isRecipient?true:thread.is_answered,
+    answered_at:isRecipient?new Date().toISOString():thread.answered_at
+  }).eq("id",thread.id);
+  input.value="";
+  toast("비공개 답장을 보냈습니다.");
+  await loadPrivateMessages();renderPrivate();
 }
 function renderPrivate(){
   const director=findDirectorProfile();
   if($("privateRecipient"))$("privateRecipient").value=director?.id||"";
   if($("privateRecipientName"))$("privateRecipientName").value=director?`${director.name||"손동오"} ${director.position||"이사"}`:"손동오 이사";
-  $("privateList").innerHTML=state.privateMessages.map(x=>`<div class="list-item"><b>${escapeHtml(x.title)}</b><small>${new Date(x.created_at).toLocaleString("ko-KR")} · ${x.is_answered?"답변완료":"확인중"}</small><p>${escapeHtml(x.content)}</p></div>`).join("")||`<div class="empty">비밀소통 내역 없음</div>`;
+
+  const list=$("privateList");
+  const detail=$("privateConversation");
+  if(!list||!detail)return;
+
+  list.innerHTML=state.privateMessages.map(x=>{
+    const mine=x.sender_id===state.user.id;
+    const other=mine?"손동오 이사":(state.employees.find(e=>e.id===x.sender_id)?.name||"직원");
+    const active=String(state.selectedPrivateMessageId)===String(x.id)?" active":"";
+    const replies=state.privateReplies.filter(r=>String(r.message_id)===String(x.id)).length;
+    return `<button type="button" class="private-thread-item${active}" onclick="selectPrivateMessage('${x.id}')">
+      <b>${escapeHtml(x.title)}</b>
+      <small>${escapeHtml(other)} · ${new Date(x.created_at).toLocaleString("ko-KR")}</small>
+      <span>${x.is_answered?"답변완료":"답변대기"} · 대화 ${replies+1}개</span>
+    </button>`;
+  }).join("")||`<div class="empty">비밀소통 내역 없음</div>`;
+
+  const thread=state.privateMessages.find(x=>String(x.id)===String(state.selectedPrivateMessageId));
+  if(!thread){
+    detail.innerHTML=`<div class="empty">왼쪽에서 비밀소통을 선택하면 대화와 답장창이 표시됩니다.</div>`;
+    return;
+  }
+  const sender=state.employees.find(e=>e.id===thread.sender_id);
+  const firstName=thread.sender_id===state.user.id?"나":(sender?.name||"직원");
+  const messages=[{sender_id:thread.sender_id,content:thread.content,created_at:thread.created_at},
+    ...state.privateReplies.filter(r=>String(r.message_id)===String(thread.id))];
+  detail.innerHTML=`
+    <div class="private-conversation-head">
+      <div><h3>${escapeHtml(thread.title)}</h3><small>작성자와 손동오 이사만 볼 수 있는 비공개 대화입니다.</small></div>
+      <span class="status-badge">${thread.is_answered?"답변완료":"답변대기"}</span>
+    </div>
+    <div class="private-chat-log">
+      ${messages.map((m,i)=>{
+        const mine=m.sender_id===state.user.id;
+        let name=mine?"나":"손동오 이사";
+        if(!mine&&m.sender_id===thread.sender_id)name=firstName;
+        return `<div class="private-chat-bubble ${mine?"mine":"other"}">
+          <b>${escapeHtml(name)}</b><p>${escapeHtml(m.content)}</p><small>${new Date(m.created_at).toLocaleString("ko-KR")}</small>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="private-reply-box">
+      <textarea id="privateReplyContent" placeholder="답장 내용을 입력하세요"></textarea>
+      <button id="sendPrivateReplyBtn" type="button" class="btn primary">답장 보내기</button>
+    </div>`;
+  $("sendPrivateReplyBtn").onclick=sendPrivateReply;
 }
 async function renderPermissions(){
   if(!has("permissions_manage"))return;
@@ -2368,8 +2480,8 @@ function renderVehicles(){
 window.selectVehicle=id=>{state.selectedVehicleId=id;if($("tripVehicle"))$("tripVehicle").value=id;if($("maintenanceVehicle"))$("maintenanceVehicle").value=id;renderVehicles()}
 window.editVehicle=id=>{const v=state.vehicles.find(x=>x.id===id);if(!v)return;state.selectedVehicleId=id;state.editingVehicleId=id;$("vehicleName").value=v.vehicle_name||"";$("vehicleNumber").value=v.vehicle_number||"";$("vehicleManager").value=v.manager_name||"";$("vehicleMileage").value=v.current_mileage||0;$("vehicleInspection").value=v.inspection_expiry||"";$("vehicleStatus").value=v.status||"운행가능";$("vehicleMemo").value=v.memo||"";activateVehicleTab("basic")}
 function clearVehicle(){state.editingVehicleId=null;["vehicleName","vehicleNumber","vehicleManager","vehicleInspection","vehicleMemo"].forEach(id=>{if($(id))$(id).value=""});$("vehicleMileage").value=0;$("vehicleStatus").value="운행가능"}
-async function saveVehicle(){if(!has("employees_manage")&&!state.profile?.is_super_admin){toast("관리자만 차량을 수정할 수 있습니다.");return}const row={vehicle_name:$("vehicleName").value.trim(),vehicle_number:$("vehicleNumber").value.trim(),manager_name:$("vehicleManager").value.trim(),current_mileage:Number($("vehicleMileage").value||0),inspection_expiry:$("vehicleInspection").value||null,status:$("vehicleStatus").value,memo:$("vehicleMemo").value.trim(),updated_at:new Date().toISOString()};if(!row.vehicle_name||!row.vehicle_number){toast("차량명과 차량번호를 입력하세요.");return}let error;if(state.editingVehicleId)({error}=await supabaseClient.from("fleet_vehicles").update(row).eq("id",state.editingVehicleId));else ({error}=await supabaseClient.from("fleet_vehicles").upsert(row,{onConflict:"vehicle_number"}));if(error){toast("차량 저장 실패: "+error.message);return}await loadVehicles();clearVehicle();renderVehicles();toast("차량 정보를 저장했습니다.")}
-async function deleteSelectedVehicle(){const v=selectedVehicle();if(!v){toast("삭제할 차량을 선택하세요.");return}if(!has("employees_manage")&&!state.profile?.is_super_admin){toast("관리자만 차량을 삭제할 수 있습니다.");return}if(!confirm(`${v.vehicle_name} ${v.vehicle_number} 차량과 연결된 운행·정비 기록을 모두 삭제할까요?`))return;const {error}=await supabaseClient.from("fleet_vehicles").delete().eq("id",v.id);if(error){toast("차량 삭제 실패: "+error.message);return}state.selectedVehicleId=null;await Promise.all([loadVehicles(),loadVehicleTrips(),loadVehicleMaintenance()]);renderVehicles();clearVehicle();toast("차량을 삭제했습니다.")}
+async function saveVehicle(){if(!has("vehicles_manage")&&!state.profile?.is_super_admin){toast("차량 관리 권한이 필요합니다.");return}const row={vehicle_name:$("vehicleName").value.trim(),vehicle_number:$("vehicleNumber").value.trim(),manager_name:$("vehicleManager").value.trim(),current_mileage:Number($("vehicleMileage").value||0),inspection_expiry:$("vehicleInspection").value||null,status:$("vehicleStatus").value,memo:$("vehicleMemo").value.trim(),updated_at:new Date().toISOString()};if(!row.vehicle_name||!row.vehicle_number){toast("차량명과 차량번호를 입력하세요.");return}let error;if(state.editingVehicleId)({error}=await supabaseClient.from("fleet_vehicles").update(row).eq("id",state.editingVehicleId));else ({error}=await supabaseClient.from("fleet_vehicles").upsert(row,{onConflict:"vehicle_number"}));if(error){toast("차량 저장 실패: "+error.message);return}await loadVehicles();clearVehicle();renderVehicles();toast("차량 정보를 저장했습니다.")}
+async function deleteSelectedVehicle(){const v=selectedVehicle();if(!v){toast("삭제할 차량을 선택하세요.");return}if(!has("vehicles_manage")&&!state.profile?.is_super_admin){toast("차량 관리 권한이 필요합니다.");return}if(!confirm(`${v.vehicle_name} ${v.vehicle_number} 차량과 연결된 운행·정비 기록을 모두 삭제할까요?`))return;const {error}=await supabaseClient.from("fleet_vehicles").delete().eq("id",v.id);if(error){toast("차량 삭제 실패: "+error.message);return}state.selectedVehicleId=null;await Promise.all([loadVehicles(),loadVehicleTrips(),loadVehicleMaintenance()]);renderVehicles();clearVehicle();toast("차량을 삭제했습니다.")}
 
 function clearVehicleTrip(){state.editingTripId=null;["tripDepartment","tripDriver","tripStartPlace","tripEndPlace","tripPurpose","tripMemo"].forEach(id=>$(id).value="");["tripDistance","tripOdometer","tripFuelCost"].forEach(id=>$(id).value=0);$("tripDate").value=isoDateOffset(0)}
 async function saveVehicleTrip(){const row={vehicle_id:$("tripVehicle").value,trip_date:$("tripDate").value,department:$("tripDepartment").value.trim(),driver_name:$("tripDriver").value.trim(),start_place:$("tripStartPlace").value.trim(),end_place:$("tripEndPlace").value.trim(),purpose_address:$("tripPurpose").value.trim(),distance_km:Number($("tripDistance").value||0),odometer_km:Number($("tripOdometer").value||0),fuel_cost:Number($("tripFuelCost").value||0),memo:$("tripMemo").value.trim(),created_by:state.user.id};if(!row.vehicle_id||!row.trip_date||!row.driver_name){toast("차량, 운행일, 운전자를 입력하세요.");return}let error;if(state.editingTripId)({error}=await supabaseClient.from("vehicle_trip_logs").update(row).eq("id",state.editingTripId));else ({error}=await supabaseClient.from("vehicle_trip_logs").insert(row));if(error){toast("운행일지 저장 실패: "+error.message);return}state.selectedVehicleId=row.vehicle_id;await Promise.all([loadVehicleTrips(),loadVehicles()]);clearVehicleTrip();renderVehicles();toast("운행일지를 저장했습니다.")}
