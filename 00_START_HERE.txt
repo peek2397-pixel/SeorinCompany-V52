@@ -1,0 +1,2 @@
+﻿1. SQL 폴더의 V52_2_APPLY.sql 파일을 Supabase SQL Editor에서 실행하세요.
+2. 그 다음 전체 파일을 GitHub 저장소에 업로드하세요.

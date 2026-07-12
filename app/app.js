@@ -1595,6 +1595,31 @@ window.selectOrgPerson=function(empNo){
   $("orgPendingInput").value=String(!!r.pending_approval);
   $("orgMoveInput").value=String(!!r.move_planned);
 }
+function renderEmergencyContacts(){
+  const box=$("emergencyTable");
+  if(!box)return;
+  const query=($("emergencySearch")?.value||"").trim().toLowerCase();
+  const rows=(state.employees||[])
+    .filter(e=>{
+      if(!query)return true;
+      return [e.name,e.department,e.team,e.position,e.phone,e.emergency_contact_name,e.emergency_contact_relation,e.emergency_contact_phone]
+        .some(v=>String(v||"").toLowerCase().includes(query));
+    })
+    .sort((a,b)=>String(a.team||"").localeCompare(String(b.team||""),"ko")||String(a.name||"").localeCompare(String(b.name||""),"ko"));
+
+  box.innerHTML=rows.length?tableHtml(
+    ["이름","부서·팀","직급","본인 전화번호","가족 비상연락처","관계"],
+    rows.map(e=>[
+      escapeHtml(e.name||""),
+      escapeHtml([e.department,e.team].filter(Boolean).join(" · ")),
+      escapeHtml(e.position||""),
+      escapeHtml(e.phone||"미등록"),
+      escapeHtml(e.emergency_contact_phone||"미등록"),
+      escapeHtml(e.emergency_contact_relation||"미등록")
+    ])
+  ):`<div class="empty">표시할 비상연락처가 없습니다.</div>`;
+}
+
 function renderOrgManagement(){
   if(!has("employees_manage"))return;
 
