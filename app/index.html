@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>서린 물류 포털</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div id="loginView" class="login-shell">
+    <div class="login-card">
+      <div class="brand-mark">S</div>
+      <h1>서린 물류 포털</h1>
+      <p>회사 사원번호와 비밀번호로 로그인하세요.</p>
+      <label>직원번호</label>
+      <input id="loginEmpNo" placeholder="회사 사원번호" autocomplete="username" />
+      <label>비밀번호</label>
+      <input id="loginPassword" type="password" autocomplete="current-password" />
+      <button id="loginBtn" class="btn primary full">로그인</button>
+      <button id="openSignupBtn" class="btn full" style="margin-top:8px">회원가입</button>
+      <div id="loginMsg" class="message"></div>
+      <div id="signupForm" class="form-card hidden" style="margin-top:14px">
+        <h3 style="margin-top:0">직원 회원가입</h3>
+        <label>사원번호</label><input id="signupEmpNo" placeholder="회사 사원번호" />
+        <label>이름</label><input id="signupName" placeholder="예: 김헌정" />
+        <label>비밀번호</label><input id="signupPassword" type="password" placeholder="6자 이상" />
+        <label>비밀번호 확인</label><input id="signupPassword2" type="password" />
+        <div class="actions"><button id="signupBtn" class="btn primary">가입하기</button><button id="closeSignupBtn" class="btn">취소</button></div>
+        <div id="signupMsg" class="message"></div>
+      </div>
+      <div class="demo-note">초기 설정 전에는 README_KO.txt의 순서대로 Supabase를 연결하세요.</div>
+    </div>
+  </div>
+
+  <div id="appView" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand"><span>S</span><div>서린 물류 포털<small>SEORIN LOGISTICS</small></div></div>
+      <nav id="menu"></nav>
+      <button id="logoutBtn" class="btn ghost logout">로그아웃</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="pageTitle">대시보드</h2>
+          <p id="pageSub">오늘의 업무 현황을 한눈에 확인합니다.</p>
+        </div>
+        <div class="user-chip">
+          <div class="avatar" id="avatar">관</div>
+          <div><b id="userName">관리자</b><small id="userMeta">물류본부</small></div>
+        </div>
+      </header>
+
+      <section id="dashboardPage" class="page active">
+        <div class="metric-grid">
+          <article class="metric"><span>이번 달 법인카드</span><b id="cardTotal">0원</b><small id="cardCount">0건</small></article>
+          <article class="metric"><span>증빙 미첨부</span><b id="missingReceipt">0건</b><small>확인 필요</small></article>
+          <article class="metric meal-metric"><span>내일 점심 식사 인원</span><b id="lunchTotal">0명</b><small id="lunchBreakdown">직원 0명 + 외주 0명</small></article>
+          <article class="metric"><span>구매 승인 대기</span><b id="pendingPurchase">0건</b><small>처리 필요</small></article>
+          <article class="metric"><span>미답변 비밀소통</span><b id="privatePending">0건</b><small>권한자만 표시</small></article>
+          <article class="metric"><span>KPI 평가 완료</span><b id="kpiDone">0명</b><small>직원에게 점수 비공개</small></article>
+        </div>
+
+        <div id="dashboardKpiShortcut" class="dashboard-kpi-shortcut">
+          <div>
+            <b>KPI 관리</b>
+            <span>개인 일일수량 · 지원분배 · 공동작업 · 월별평가 · 기간평가</span>
+          </div>
+          <button class="btn primary" onclick="goPage('kpi')">KPI 바로가기</button>
+        </div>
+
+        <div class="content-grid">
+          <article class="panel span-2">
+            <div class="panel-head"><div><h3>오늘·내일 회사 일정</h3><small>B2C 행사와 회의실 예약을 함께 표시합니다.</small></div></div>
+            <div id="dashboardScheduleList" class="list"></div>
+          </article>
+          <article id="dashboardPurchasePanel" class="panel span-2">
+            <div class="panel-head">
+              <div><h3 id="dashboardPurchaseTitle">구매 신청 현황</h3><small id="dashboardPurchaseGuide">구매 요청과 처리 상태를 확인합니다.</small></div>
+              <button class="btn small primary" onclick="goPage('purchase')">구매관리 바로가기</button>
+            </div>
+            <div id="dashboardPurchaseSummary" class="purchase-dashboard-summary"></div>
+            <div id="dashboardPurchaseList"></div>
+          </article>
+          <article class="panel span-2">
+            <div class="panel-head"><h3>월별 법인카드 사용 현황</h3><button class="btn small" onclick="goPage('corporateCard')">내역 보기</button></div>
+            <div id="cardChart" class="bar-chart"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h3>최근 공지</h3></div>
+            <div id="recentNotices" class="list"></div>
+          </article>
+          <article class="panel lunch-panel">
+            <div class="panel-head">
+              <div><h3>내일 점심 식사 인원</h3><small>근무·휴무 달력과 외주 인력을 자동 합산합니다.</small></div>
+              <button class="btn small primary" onclick="goPage('contractors')">외주 인력 입력</button>
+            </div>
+            <div id="lunchDashboardDetail" class="lunch-dashboard-detail"></div>
+          </article>
+          <article class="panel span-2">
+            <div class="panel-head"><h3>최근 법인카드 사용</h3></div>
+            <div id="recentCards"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="noticesPage" class="page">
+        <div class="panel">
+          <div class="panel-head"><h3>공지사항</h3><button id="newNoticeBtn" class="btn primary">공지 등록</button></div>
+          <div id="noticeForm" class="form-card hidden">
+            <div class="form-grid">
+              <label class="span-2">제목<input id="noticeTitle" /></label>
+              <label class="span-2">내용<textarea id="noticeContent"></textarea></label>
+            </div>
+            <div class="actions"><button id="saveNoticeBtn" class="btn primary">저장</button><button class="btn" onclick="toggle('noticeForm')">취소</button></div>
+          </div>
+          <div id="noticeTable"></div>
+        </div>
+      </section>
+
+      <section id="organizationPage" class="page">
+        <div class="panel">
+          <div class="panel-head">
+            <h3>직원 조직도</h3>
+            <div class="actions" style="margin-top:0">
+              <button id="toggleOrgEditBtn" class="btn primary">조직도 수정</button>
+              <button id="saveOrgOrderBtn" class="btn hidden">정렬 저장</button>
+            </div>
+          </div>
+          <div class="privacy-note">
+            조직도 수정 권한이 있는 관리자만 팀·직급·표시순서를 변경할 수 있습니다.
+          </div>
+          <div id="orgChart" class="org-chart editable-org"></div>
+        </div>
+
+        <div id="orgEditPanel" class="org-edit-modal hidden">
+          <div class="panel org-edit-dialog">
+            <div class="panel-head">
+              <div>
+                <h3>조직도 관리</h3>
+                <span class="badge">홈페이지에서 직접 수정</span>
+              </div>
+              <button id="closeOrgEditBtn" class="btn">닫기</button>
+            </div>
+
+            <div class="content-grid">
+              <article class="panel inner-panel">
+                <div class="panel-head"><h3>팀 관리</h3></div>
+                <div class="form-grid">
+                  <label>팀명<input id="newOrgTeamName" placeholder="예: B2B 국내팀" /></label>
+                  <label>표시순서<input id="newOrgTeamOrder" type="number" value="99" /></label>
+                </div>
+                <div class="actions">
+                  <button id="addOrgTeamBtn" class="btn primary">팀 추가</button>
+                </div>
+                <div id="orgTeamTable"></div>
+              </article>
+
+              <article class="panel inner-panel">
+                <div class="panel-head"><h3>직원 소속·직급 수정</h3></div>
+                <div class="form-grid">
+                  <label>직원<select id="orgEmployeeSelect"></select></label>
+                  <label>부서<input id="orgDepartmentInput" placeholder="예: 물류본부" /></label>
+                  <label>팀<select id="orgTeamSelect"></select></label>
+                  <label>직급<input id="orgPositionInput" placeholder="예: 팀장, 주임, 사원" /></label>
+                  <label>조직 단계
+                    <select id="orgLevelInput">
+                      <option value="1">1단계 · 총괄/이사</option>
+                      <option value="2">2단계 · 팀장/부서장</option>
+                      <option value="3">3단계 · 중간관리자</option>
+                      <option value="4">4단계 · 일반직원</option>
+                    </select>
+                  </label>
+                  <label>상위 관리자
+                    <select id="orgManagerInput"></select>
+                  </label>
+                  <label>표시순서<input id="orgSortOrderInput" type="number" value="999" /></label>
+                  <label>승인 대상
+                    <select id="orgPendingInput">
+                      <option value="false">아니오</option>
+                      <option value="true">예</option>
+                    </select>
+                  </label>
+                  <label>이동 예정
+                    <select id="orgMoveInput">
+                      <option value="false">아니오</option>
+                      <option value="true">예</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="actions">
+                  <button id="saveOrgEmployeeBtn" class="btn primary">직원 조직정보 저장</button>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+
+
+        <div id="orgPersonModal" class="modal hidden">
+          <div class="modal-card org-person-modal-card">
+            <div class="panel-head"><h3>직원 연락처</h3><button id="closeOrgPersonModalBtn" class="btn small">닫기</button></div>
+            <div id="orgPersonDetail"></div>
+          </div>
+        </div>
+        <div id="emergencyPanel" class="panel hidden">
+          <div class="panel-head">
+            <h3>비상 연락망</h3>
+            <input id="emergencySearch" class="compact-search" placeholder="이름·부서·팀 검색" />
+          </div>
+          <div class="privacy-note">
+            비상 연락망은 허용된 직원만 볼 수 있습니다. 비상 상황 또는 업무상 필요한 경우에만 사용하세요.
+          </div>
+          <div id="emergencyTable"></div>
+        </div>
+      </section>
+
+      <section id="communityPage" class="page">
+        <div class="chat-shell messenger-shell">
+          <aside class="chat-side">
+            <div class="messenger-side-head">
+              <div>
+                <div class="chat-side-title">업무 메신저</div>
+                <small>1:1 및 그룹 대화</small>
+              </div>
+              <button id="newMessengerRoomBtn" class="btn primary small">+ 새 대화</button>
+            </div>
+
+            <div id="messengerRoomList" class="messenger-room-list">
+              <button class="chat-room active" data-room-id="global">
+                <b>📢 전체 소통방</b>
+                <small>모든 직원이 함께 대화합니다.</small>
+              </button>
+            </div>
+
+            <div class="online-box">
+              <span class="online-dot"></span>
+              <span id="chatConnectionText">실시간 연결 준비 중</span>
+            </div>
+          </aside>
+
+          <section class="chat-main">
+            <header class="chat-head">
+              <div>
+                <h3 id="messengerRoomTitle">전체 소통방</h3>
+                <small id="messengerRoomSubtitle">업무 공유, 질문, 자유로운 대화</small>
+              </div>
+              <div class="chat-head-actions">
+                <button id="messengerMembersBtn" class="btn small hidden">참여자</button>
+                <button id="refreshChatBtn" class="btn small">새로고침</button>
+              </div>
+            </header>
+
+            <div id="chatMessages" class="chat-messages">
+              <div class="empty">메시지를 불러오는 중입니다.</div>
+            </div>
+
+            <div class="chat-compose">
+              <textarea id="chatInput" maxlength="2000" placeholder="메시지를 입력하세요. Enter 전송 / Shift+Enter 줄바꿈"></textarea>
+              <button id="sendChatBtn" class="btn primary">전송</button>
+            </div>
+          </section>
+        </div>
+
+        <div id="messengerRoomModal" class="modal hidden">
+          <div class="modal-card messenger-modal-card">
+            <div class="panel-head">
+              <h3>새 메신저 방 만들기</h3>
+              <button id="closeMessengerRoomModalBtn" class="btn small">닫기</button>
+            </div>
+            <div class="form-grid">
+              <label>대화 방식
+                <select id="messengerRoomType">
+                  <option value="direct">1:1 대화</option>
+                  <option value="group">그룹 대화</option>
+                </select>
+              </label>
+              <label id="messengerRoomNameWrap" class="hidden">방 이름
+                <input id="messengerRoomName" maxlength="60" placeholder="예: 구매 협의방" />
+              </label>
+              <label class="span-2">직원 검색
+                <input id="messengerEmployeeSearch" placeholder="이름·팀·직급 검색" />
+              </label>
+            </div>
+            <div id="messengerEmployeePicker" class="messenger-employee-picker"></div>
+            <div class="modal-actions">
+              <span id="messengerSelectedCount">0명 선택</span>
+              <button id="createMessengerRoomBtn" class="btn primary">대화 시작</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="messengerMembersModal" class="modal hidden">
+          <div class="modal-card messenger-members-card">
+            <div class="panel-head">
+              <h3>대화 참여자</h3>
+              <button id="closeMessengerMembersBtn" class="btn small">닫기</button>
+            </div>
+            <div id="messengerMembersList" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="privatePage" class="page">
+        <div class="content-grid">
+          <article class="panel">
+            <div class="panel-head"><h3>1:1 비밀소통 작성</h3></div>
+            <div class="form-grid">
+              <label>제목<input id="privateTitle" /></label>
+              <label>받는 사람<select id="privateRecipient"></select></label>
+              <label class="span-2">내용<textarea id="privateContent"></textarea></label>
+            </div>
+            <button id="sendPrivateBtn" class="btn primary">비공개로 보내기</button>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h3>내 비밀소통</h3></div>
+            <div id="privateList" class="list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="corporateCardPage" class="page">
+        <div class="panel">
+          <div class="panel-head"><h3>법인카드 사용 등록</h3></div>
+          <div class="form-grid">
+            <label>사용날짜<input id="cardDate" type="date" /></label>
+            <label>카드소유자<input id="cardOwner" /></label>
+            <label>실사용자<input id="cardUser" /></label>
+            <label>계정과목<select id="cardAccount"><option>주유</option><option>식대</option><option>물류용품</option><option>주차비</option><option>통행료</option><option>기타</option></select></label>
+            <label>사용처<input id="cardVendor" /></label>
+            <label>적요/품목<input id="cardItem" /></label>
+            <label>사용금액<input id="cardAmount" type="number" min="0" /></label>
+            <label>증빙<select id="cardReceipt"><option>첨부</option><option>미첨부</option><option>해당없음</option></select></label>
+            <label class="span-2">영수증 사진
+              <input id="cardReceiptFile" type="file" accept="image/*" capture="environment" />
+              <small style="display:block;margin-top:6px;color:#718096">휴대폰에서는 카메라 또는 사진 선택이 열립니다.</small>
+            </label>
+            <div id="receiptPreviewWrap" class="span-2 hidden" style="margin-top:4px">
+              <img id="receiptPreview" alt="영수증 미리보기" style="max-width:260px;max-height:260px;border:1px solid #dfe7f0;border-radius:10px;object-fit:contain;background:white" />
+            </div>
+            <label class="span-2">비고<input id="cardMemo" /></label>
+          </div>
+          <div class="actions"><button id="saveCardBtn" class="btn primary">사용내역 저장</button><button id="exportCardBtn" class="btn">엑셀 다운로드</button></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>법인카드 내역</h3><div class="filters"><input id="cardMonthFilter" type="month" /><input id="cardSearch" placeholder="사용자·사용처 검색" /></div></div>
+          <div id="cardTable"></div>
+        </div>
+      </section>
+
+      <section id="inventoryPage" class="page">
+        <div class="content-grid">
+          <article class="panel">
+            <div class="panel-head"><h3>물류 물품 등록</h3></div>
+            <div class="form-grid">
+              <label>품목명<input id="itemName" placeholder="예: 요소수" /></label>
+              <label>분류<input id="itemCategory" placeholder="예: 차량용품" /></label>
+              <label>규격<input id="itemSpec" placeholder="예: 10L" /></label>
+              <label>단위<input id="itemUnit" placeholder="예: 통" /></label>
+              <label>현재재고<input id="itemStock" type="number" min="0" /></label>
+              <label>최소재고<input id="itemMinStock" type="number" min="0" /></label>
+              <label>보관위치<input id="itemLocation" /></label>
+              <label>거래처<input id="itemVendor" /></label>
+              <label>단가<input id="itemPrice" type="number" min="0" /></label>
+            </div>
+            <button id="saveItemBtn" class="btn primary">품목 저장</button>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h3>입고·사용 등록</h3></div>
+            <div class="form-grid">
+              <label>품목<select id="txItem"></select></label>
+              <label>구분<select id="txType"><option value="in">입고</option><option value="out">사용</option><option value="discard">폐기</option><option value="adjust">조정</option></select></label>
+              <label>수량<input id="txQty" type="number" min="0" /></label>
+              <label>사용자/담당자<input id="txPerson" /></label>
+              <label class="span-2">메모<input id="txMemo" /></label>
+            </div>
+            <button id="saveTxBtn" class="btn primary">재고 반영</button>
+          </article>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>물품 재고 현황</h3><button id="exportInventoryBtn" class="btn">엑셀 다운로드</button></div>
+          <div id="inventoryTable"></div>
+        </div>
+      </section>
+
+      <section id="purchasePage" class="page">
+        <div class="purchase-summary-grid">
+          <article class="metric"><span>신청</span><b id="purchaseCountRequested">0건</b><small>신규 구매요청</small></article>
+          <article class="metric"><span>검토·승인대기</span><b id="purchaseCountReview">0건</b><small>김헌정 검토 / 손동오 승인</small></article>
+          <article class="metric"><span>발주·입고중</span><b id="purchaseCountProgress">0건</b><small>구매 진행 상태</small></article>
+          <article class="metric"><span>구매완료</span><b id="purchaseCountDone">0건</b><small>사용기간 확인 가능</small></article>
+        </div>
+
+        <div class="content-grid purchase-layout">
+          <article class="panel">
+            <div class="panel-head"><h3>구매 신청</h3></div>
+            <div class="form-grid">
+              <label>품목명<input id="purchaseItemName" placeholder="예: 박스테이프" /></label>
+              <label>수량<input id="purchaseQuantity" type="number" min="1" value="1" /></label>
+              <label>단위<input id="purchaseUnit" placeholder="예: 개, 박스" /></label>
+              <label>희망일<input id="purchaseNeededDate" type="date" /></label>
+              <label>긴급 여부<select id="purchaseUrgent"><option value="false">일반</option><option value="true">긴급</option></select></label>
+              <label>예상금액<input id="purchaseEstimatedAmount" type="number" min="0" placeholder="선택 입력" /></label>
+              <label class="span-2">사용 목적<input id="purchasePurpose" placeholder="구매가 필요한 이유를 입력하세요." /></label>
+              <label class="span-2">비고<textarea id="purchaseMemo" rows="3" placeholder="규격, 거래처 등 추가 내용을 입력하세요."></textarea></label>
+            </div>
+            <button id="savePurchaseBtn" class="btn primary">구매 신청</button>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head"><h3>처리 흐름</h3></div>
+            <div class="purchase-flow">
+              <div><b>1. 직원</b><span>구매 신청</span></div>
+              <div><b>2. 김헌정</b><span>확인·검토 완료</span></div>
+              <div><b>3. 손동오</b><span>최종 승인 또는 반려</span></div>
+              <div><b>4. 김헌정</b><span>발주 → 입고 → 구매완료</span></div>
+            </div>
+            <div class="notice-box">구매완료 후 실제로 모두 사용한 날에 <b>사용완료</b>를 누르면 구매완료일부터 사용완료일까지의 기간이 자동 계산됩니다.</div>
+          </article>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head purchase-head">
+            <h3 id="purchaseListTitle">구매 신청 내역</h3>
+            <div class="inline-actions">
+              <select id="purchaseStatusFilter" class="compact-select">
+                <option value="all">전체 상태</option>
+                <option value="requested">신청</option>
+                <option value="reviewing">검토중</option>
+                <option value="review_complete">승인대기</option>
+                <option value="approved">승인완료</option>
+                <option value="ordered">발주완료</option>
+                <option value="received">입고완료</option>
+                <option value="completed">구매완료</option>
+                <option value="rejected">반려</option>
+              </select>
+              <button id="refreshPurchaseBtn" class="btn">새로고침</button>
+            </div>
+          </div>
+          <div id="purchaseTable"></div>
+        </div>
+      </section>
+
+
+      <section id="calendarPage" class="page">
+        <div class="panel calendar-toolbar">
+          <div class="calendar-nav">
+            <button id="prevMonthBtn" class="btn">◀</button>
+            <h3 id="calendarTitle">근무·휴무 달력</h3>
+            <button id="nextMonthBtn" class="btn">▶</button>
+            <button id="todayBtn" class="btn">이번 달</button>
+          </div>
+          <div class="calendar-actions">
+            <select id="calendarEmployeeFilter" class="compact-select"></select>
+            <button id="openCalendarFormBtn" class="btn primary">내 일정 등록</button>
+          </div>
+        </div>
+
+        <div class="calendar-summary-grid">
+          <article class="metric"><span>연차 부여</span><b id="annualGranted">0일</b><small>관리자 입력</small></article>
+          <article class="metric"><span>연차 사용</span><b id="annualUsed">0일</b><small>연차·반차·반반차</small></article>
+          <article class="metric"><span>연차 잔여</span><b id="annualBalance">0일</b><small>부여 - 사용</small></article>
+          <article class="metric"><span>주말근무 환산</span><b id="weekendCredit">0일</b><small>근무 1일 → 1.5일</small></article>
+          <article class="metric"><span>대체휴일 사용</span><b id="compUsed">0일</b><small>사용 누계</small></article>
+          <article class="metric"><span>대체휴일 잔여</span><b id="compBalance">0일</b><small>적립 - 사용</small></article>
+        </div>
+
+        <div id="calendarForm" class="panel hidden">
+          <div id="calendarTargetRow" class="form-grid hidden">
+            <label>등록 대상 직원
+              <select id="calendarTargetEmployee"></select>
+            </label>
+          </div>
+          <div class="panel-head"><h3>근무·휴무 일정 등록</h3></div>
+          <div class="form-grid">
+            <label>구분
+              <select id="calType">
+                <option value="off">휴무</option>
+                <option value="annual">연차 (1일)</option>
+                <option value="half">반차 (0.5일)</option>
+                <option value="quarter">반반차 (0.25일)</option>
+                <option value="weekend_work">주말근무 (1일 → 1.5일 적립)</option>
+                <option value="comp_used">대체휴일 사용</option>
+                <option value="other">기타</option>
+              </select>
+            </label>
+            <label>사용/근무 일수<input id="calDays" type="number" min="0.25" step="0.25" value="1" /></label>
+            <label>시작일<input id="calStart" type="date" /></label>
+            <label>종료일<input id="calEnd" type="date" /></label>
+            <label class="span-2">메모<input id="calMemo" placeholder="예: 토요일 출근, 연차 사용 사유" /></label>
+          </div>
+          <div class="actions">
+            <button id="saveCalendarBtn" class="btn primary">저장</button>
+            <button id="closeCalendarFormBtn" class="btn">취소</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div id="workCalendar" class="work-calendar"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>근무·휴무 사용내역</h3></div>
+          <div id="calendarHistory"></div>
+        </div>
+      </section>
+
+
+      <section id="contractorsPage" class="page">
+        <div class="content-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h3>외주 업체 인력 등록</h3>
+                <small>날짜별 출근 인원과 점심 식사 인원을 입력합니다.</small>
+              </div>
+            </div>
+            <div class="form-grid">
+              <label>근무일<input id="contractorWorkDate" type="date" /></label>
+              <label>외주 업체명<input id="contractorCompany" placeholder="예: ○○인력" /></label>
+              <label>작업 구역<input id="contractorWorkArea" placeholder="예: B2C 포장 / 상차장" /></label>
+              <label>출근 인원<input id="contractorHeadcount" type="number" min="0" step="1" value="0" /></label>
+              <label>점심 식사 인원<input id="contractorMealCount" type="number" min="0" step="1" value="0" /></label>
+              <label class="span-2">메모<input id="contractorMemo" placeholder="예: 오전 8시 투입, 도시락 포함" /></label>
+            </div>
+            <div class="actions">
+              <button id="saveContractorBtn" class="btn primary">외주 인력 저장</button>
+              <button id="clearContractorBtn" class="btn">입력 초기화</button>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <div><h3>선택 날짜 식사 현황</h3><small>직원 출근 인원과 외주 식사 인원을 합산합니다.</small></div>
+              <button id="refreshContractorBtn" class="btn small">새로고침</button>
+            </div>
+            <div class="calendar-summary-grid contractor-summary">
+              <article class="metric"><span>직원 식사 인원</span><b id="contractorInternalMeals">0명</b><small>휴무·연차·대휴 제외</small></article>
+              <article class="metric"><span>외주 출근 인원</span><b id="contractorExternalWorkers">0명</b><small>외주 업체 합계</small></article>
+              <article class="metric"><span>외주 식사 인원</span><b id="contractorExternalMeals">0명</b><small>식사 신청 합계</small></article>
+              <article class="metric meal-metric"><span>총 점심 주문 인원</span><b id="contractorTotalMeals">0명</b><small>직원 + 외주</small></article>
+            </div>
+          </article>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>외주 업체 인력 내역</h3><small>수정은 해당 행의 수정 버튼을 눌러 입력칸에서 다시 저장하세요.</small></div>
+            <div class="actions compact-actions">
+              <input id="contractorMonthFilter" type="month" />
+              <button id="todayContractorBtn" class="btn small">오늘</button>
+            </div>
+          </div>
+          <div id="contractorTable"></div>
+        </div>
+      </section>
+
+
+      <section id="eventsPage" class="page">
+        <div class="content-grid">
+          <article class="panel">
+            <div class="panel-head"><div><h3>회사 일정·B2C 행사 등록</h3><small>모든 직원의 달력과 대시보드에 표시됩니다.</small></div></div>
+            <div class="form-grid">
+              <label>구분<select id="eventType"><option value="b2c">B2C 행사</option><option value="company">회사 일정</option><option value="education">교육</option><option value="cleanup">창고 정리</option><option value="dinner">회식</option><option value="other">기타</option></select></label>
+              <label>행사명<input id="eventTitle" placeholder="예: 올리브영 B2C 행사" /></label>
+              <label>시작일<input id="eventStartDate" type="date" /></label>
+              <label>종료일<input id="eventEndDate" type="date" /></label>
+              <label>시간<input id="eventTime" placeholder="예: 09:00~17:00" /></label>
+              <label>담당자<input id="eventManager" placeholder="예: 정해림" /></label>
+              <label>참여 인원<input id="eventParticipants" type="number" min="0" value="0" /></label>
+              <label>장소<input id="eventLocation" placeholder="행사 장소" /></label>
+              <label class="span-2">내용<textarea id="eventMemo" placeholder="준비물과 참고사항"></textarea></label>
+            </div>
+            <div class="actions"><button id="saveCompanyEventBtn" class="btn primary">일정 저장</button><button id="clearCompanyEventBtn" class="btn">초기화</button></div>
+          </article>
+          <article class="panel"><div class="panel-head"><h3>다가오는 일정</h3></div><div id="eventUpcomingList" class="list"></div></article>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>전체 일정</h3><input id="eventMonthFilter" type="month" /></div><div id="companyEventTable"></div></div>
+      </section>
+
+      <section id="meetingsPage" class="page">
+        <div class="content-grid">
+          <article class="panel">
+            <div class="panel-head"><div><h3>회의실 예약</h3><small>겹치는 시간은 예약할 수 없습니다.</small></div></div>
+            <div class="form-grid">
+              <label>회의실<select id="meetingRoom"><option value="회의실">회의실</option></select></label>
+              <label>날짜<input id="meetingDate" type="date" /></label>
+              <label>시작시간<input id="meetingStart" type="time" /></label>
+              <label>종료시간<input id="meetingEnd" type="time" /></label>
+              <label class="span-2">미팅명<input id="meetingTitle" placeholder="예: ABC업체 미팅" /></label>
+              <label>예약자<input id="meetingOrganizer" placeholder="예약자 이름" /></label>
+              <label>누구와 미팅<input id="meetingWith" placeholder="예: ABC물류 김○○ 부장" /></label>
+              <label class="span-2">참석자<input id="meetingAttendees" placeholder="예: 손동오, 김헌정" /></label>
+              <label class="span-2">메모<textarea id="meetingMemo"></textarea></label>
+            </div>
+            <div class="actions"><button id="saveMeetingBtn" class="btn primary">회의실 예약</button><button id="clearMeetingBtn" class="btn">초기화</button></div>
+          </article>
+          <article class="panel"><div class="panel-head"><h3>오늘·내일 예약</h3></div><div id="meetingTodayList" class="list"></div></article>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>월별 예약 현황</h3><input id="meetingMonthFilter" type="month" /></div><div id="meetingTable"></div></div>
+      </section>
+      <section id="vehiclesPage" class="page">
+        <div class="panel vehicle-top-panel">
+          <div class="panel-head">
+            <div>
+              <h3>차량관리</h3>
+              <small>차량 기본정보, 운행일지, 정비·수리 이력을 차량별로 관리합니다.</small>
+            </div>
+            <div class="actions compact-actions">
+              <button id="exportSelectedVehicleExcelBtn" class="btn">선택 차량 엑셀</button>
+              <button id="exportVehicleExcelBtn" class="btn primary">전체 차량 엑셀</button>
+            </div>
+          </div>
+          <div id="vehicleCards" class="vehicle-card-grid"></div>
+          <div id="selectedVehicleSummary" class="selected-vehicle-summary"></div>
+        </div>
+
+        <div class="vehicle-tabs vehicle-main-tabs">
+          <button class="vehicle-tab active" data-vtab="basic">차량 기본정보</button>
+          <button class="vehicle-tab" data-vtab="trip">운행일지</button>
+          <button class="vehicle-tab" data-vtab="maintenance">정비관리</button>
+        </div>
+
+        <section id="vehicleBasicPanel" class="vehicle-tab-panel">
+          <div class="content-grid">
+            <article class="panel">
+              <div class="panel-head"><h3>차량 등록·수정</h3></div>
+              <div class="form-grid">
+                <label>차량명<input id="vehicleName" placeholder="예: 모하비" /></label>
+                <label>차량번호<input id="vehicleNumber" placeholder="예: 22우8010" /></label>
+                <label>담당자<input id="vehicleManager" /></label>
+                <label>현재 주행거리<input id="vehicleMileage" type="number" min="0" /></label>
+                <label>검사 만료일<input id="vehicleInspection" type="date" /></label>
+                <label>상태<select id="vehicleStatus"><option value="운행가능">운행가능</option><option value="정비중">정비중</option><option value="사용중지">사용중지</option></select></label>
+                <label>비고<input id="vehicleMemo" /></label>
+              </div>
+              <div class="actions">
+                <button id="saveVehicleBtn" class="btn primary">차량 저장</button>
+                <button id="clearVehicleBtn" class="btn">초기화</button>
+                <button id="deleteVehicleBtn" class="btn danger">선택 차량 삭제</button>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><h3>차량 알림</h3><small>30일 이내 검사·정비 예정</small></div>
+              <div id="vehicleAlertList" class="list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="vehicleTripPanel" class="panel vehicle-tab-panel hidden">
+          <div class="panel-head">
+            <div><h3>운행일지</h3><small>선택한 차량의 운행기록을 등록하고 월별로 확인합니다.</small></div>
+            <input id="tripMonthFilter" type="month" />
+          </div>
+          <div class="form-grid">
+            <label>차량<select id="tripVehicle"></select></label><label>운행일<input id="tripDate" type="date" /></label>
+            <label>부서<input id="tripDepartment" /></label><label>운전자<input id="tripDriver" /></label>
+            <label>출발지<input id="tripStartPlace" /></label><label>도착지<input id="tripEndPlace" /></label>
+            <label class="span-2">주소·운행목적<input id="tripPurpose" /></label>
+            <label>주행 km<input id="tripDistance" type="number" min="0" step="0.1" /></label>
+            <label>최종 계기판 km<input id="tripOdometer" type="number" min="0" step="0.1" /></label>
+            <label>주유금액<input id="tripFuelCost" type="number" min="0" /></label><label>메모<input id="tripMemo" /></label>
+          </div>
+          <div class="actions"><button id="saveVehicleTripBtn" class="btn primary">운행일지 저장</button><button id="clearVehicleTripBtn" class="btn">초기화</button></div>
+          <div id="vehicleTripTable"></div>
+        </section>
+
+        <section id="vehicleMaintenancePanel" class="panel vehicle-tab-panel hidden">
+          <div class="panel-head">
+            <div><h3>정비관리</h3><small>엔진오일·타이어·배터리·브레이크·일반수리 등의 이력을 관리합니다.</small></div>
+            <input id="maintenanceMonthFilter" type="month" />
+          </div>
+          <div class="form-grid">
+            <label>차량<select id="maintenanceVehicle"></select></label><label>정비일<input id="maintenanceDate" type="date" /></label>
+            <label>정비 항목<select id="maintenanceType"><option>엔진오일</option><option>타이어</option><option>배터리</option><option>브레이크</option><option>필터</option><option>검사</option><option>일반 수리</option><option>사고 수리</option><option>기타</option></select></label>
+            <label>당시 주행거리<input id="maintenanceMileage" type="number" min="0" /></label>
+            <label>정비업체<input id="maintenanceShop" /></label><label>비용<input id="maintenanceCost" type="number" min="0" /></label>
+            <label>다음 예정일<input id="maintenanceNextDate" type="date" /></label><label>다음 예정 km<input id="maintenanceNextMileage" type="number" min="0" /></label>
+            <label class="span-2">메모<input id="maintenanceMemo" /></label>
+          </div>
+          <div class="actions"><button id="saveVehicleMaintenanceBtn" class="btn primary">정비 내역 저장</button><button id="clearVehicleMaintenanceBtn" class="btn">초기화</button></div>
+          <div id="vehicleMaintenanceTable"></div>
+        </section>
+      </section>
+
+      <section id="accountPage" class="page">
+        <div class="content-grid">
+          <article class="panel">
+            <div class="panel-head"><h3>내 정보</h3></div>
+            <div id="myProfileCard"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h3>비밀번호 변경</h3></div>
+            <div class="form-grid">
+              <label>현재 비밀번호<input id="currentPassword" type="password" /></label>
+              <label>새 비밀번호<input id="newPassword" type="password" placeholder="6자 이상" /></label>
+              <label>새 비밀번호 확인<input id="newPassword2" type="password" /></label>
+            </div>
+            <div class="actions"><button id="changePasswordBtn" class="btn primary">비밀번호 변경</button></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="kpiPage" class="page">
+        <div class="panel kpi-host-panel">
+          <div class="panel-head">
+            <div>
+              <h3>B2C 직원 KPI 관리</h3>
+              <small class="muted-text">서린 물류 포털 안에서 바로 사용합니다.</small>
+            </div>
+            <div class="kpi-header-actions">
+              <span class="badge">직원 점수·등급·순위 비공개</span>
+              <button id="reloadKpiBtn" class="btn small">KPI 새로고침</button>
+            </div>
+          </div>
+          <iframe
+            id="kpiFrame"
+            src="kpi.html"
+            title="B2C 직원 KPI 관리"
+            class="kpi-embedded-frame"
+            loading="eager"
+          ></iframe>
+        </div>
+      </section>
+
+
+      <section id="b2bPage" class="page">
+        <div class="panel b2b-host-panel">
+          <div class="panel-head">
+            <div>
+              <h3>B2B 작업 통계·반기 성과평가</h3>
+              <small class="muted-text">B2B 원본 로그인 방식을 그대로 사용합니다.</small>
+            </div>
+            <div class="kpi-header-actions">
+              <span class="badge">B2B 별도 로그인 사용</span>
+              <button id="reloadB2bBtn" class="btn small">B2B 새로고침</button>
+            </div>
+          </div>
+          <iframe id="b2bFrame" src="b2b.html" title="B2B 작업 통계" class="b2b-embedded-frame"></iframe>
+        </div>
+      </section>
+
+      <section id="employeesPage" class="page">
+        <div class="employee-manage-layout">
+          <article class="panel employee-list-panel">
+            <div class="panel-head">
+              <div><h3>직원 목록</h3><small class="muted-text">가입 전·가입 완료 직원 모두 표시됩니다. 수정 버튼을 누르면 오른쪽에서 연차를 변경할 수 있습니다.</small></div>
+              <button id="refreshEmployeesBtn" class="btn">새로고침</button>
+            </div>
+            <div id="employeeTable"></div>
+          </article>
+
+          <div class="employee-side-column">
+            <div class="employee-mode-tabs">
+              <button id="showEmployeeEditBtn" class="btn primary">직원 정보 수정</button>
+              <button id="showEmployeeAddBtn" class="btn">신규 직원 추가</button>
+            </div>
+
+            <article id="employeeEditPanel" class="panel employee-sticky-panel">
+              <div class="panel-head"><h3>직원 정보 수정</h3><span class="badge">연차·부서·팀·직급 수정</span></div>
+              <div id="employeeEditEmpty" class="empty">왼쪽 직원 목록에서 <b>수정</b> 버튼을 누르세요.</div>
+              <div id="employeeEditForm" class="hidden">
+                <input id="editEmployeeId" type="hidden" />
+                <input id="editRegistryOnly" type="hidden" value="false" /><input id="editOriginalEmpNo" type="hidden" />
+                <div class="selected-employee-summary">
+                  <strong id="editSelectedEmployeeName">선택 직원</strong>
+                  <span id="editSelectedEmployeeAccount" class="badge"></span>
+                </div>
+                <div class="leave-summary-grid leave-summary-grid-6">
+                  <div><span>기본 부여 연차</span><b id="editLeaveGrantedPreview">0일</b></div>
+                  <div><span>관리자 연차 조정</span><b id="editAnnualAdjustmentPreview">0일</b></div>
+                  <div><span>연차 사용</span><b id="editLeaveUsedPreview">0일</b></div>
+                  <div><span>연차 잔여</span><b id="editLeaveBalancePreview">0일</b></div>
+                  <div><span>대휴 적립·조정</span><b id="editCompGrantedPreview">0일</b></div>
+                  <div><span>대휴 잔여</span><b id="editCompBalancePreview">0일</b></div>
+                </div>
+                <div class="form-grid">
+                  <label>사원번호<input id="editEmpNo" /></label>
+                  <label>이름<input id="editName" /></label>
+                  <label>부서<input id="editDepartment" /></label>
+                  <label>팀<select id="editTeam"><option>발주팀</option><option>국내팀</option><option>해외팀</option><option>B2C</option><option>물류지원팀</option><option>관리</option></select></label>
+                  <label>직급<input id="editPosition" /></label>
+                  <label>전화번호<input id="editPhone" /></label>
+                  <label>연차 부여일수<input id="editAnnualLeave" type="number" min="0" step="0.25" /></label>
+                  <label>표시순서<input id="editSortOrder" type="number" /></label>
+                  <label>비상연락 대상자<input id="editEmergencyName" placeholder="예: 배우자 또는 가족" /></label>
+                  <label>관계<input id="editEmergencyRelation" placeholder="예: 배우자" /></label>
+                  <label>비상연락처<input id="editEmergencyPhone" placeholder="예: 010-0000-0000" /></label>
+                  <label>재직상태<select id="editActive"><option value="true">재직</option><option value="false">퇴사/비활성</option></select></label>
+                  <label class="joined-only-field">최고관리자<select id="editSuperAdmin"><option value="false">아니오</option><option value="true">예</option></select></label>
+                  <label class="joined-only-field">비밀소통 수신<select id="editPrivateReceiver"><option value="false">아니오</option><option value="true">예</option></select></label>
+                </div>
+                <div class="actions"><button id="saveEmployeeBtn" class="btn primary">직원정보 저장</button><button id="goPermissionBtn" class="btn joined-only-field">이 직원 권한 설정</button></div>
+
+                <section class="leave-admin-box joined-only-field">
+                  <div class="panel-head compact-head"><div><h4>관리자 연차·대휴 직접 수정</h4><small class="muted-text">현재 잔여일수를 원하는 값으로 다시 맞출 수 있습니다.</small></div><span class="badge">관리자 전용</span></div>
+                  <div class="form-grid">
+                    <label>연차 잔여일수로 수정<input id="editAnnualBalanceTarget" type="number" min="0" step="0.25" placeholder="예: 12.5" /></label>
+                    <label>대휴 잔여일수로 수정<input id="editCompBalanceTarget" type="number" min="0" step="0.25" placeholder="예: 3" /></label>
+                    <label class="span-2">수정 사유<input id="editLeaveAdjustmentReason" maxlength="200" placeholder="예: 기존 장부 확인 후 잔여일수 정정" /></label>
+                  </div>
+                  <div class="leave-quick-buttons">
+                    <button type="button" class="btn small" data-leave-type="annual" data-delta="1">연차 +1</button>
+                    <button type="button" class="btn small" data-leave-type="annual" data-delta="0.5">연차 +0.5</button>
+                    <button type="button" class="btn small danger" data-leave-type="annual" data-delta="-1">연차 -1</button>
+                    <button type="button" class="btn small" data-leave-type="comp" data-delta="1.5">대휴 +1.5</button>
+                    <button type="button" class="btn small" data-leave-type="comp" data-delta="1">대휴 +1</button>
+                    <button type="button" class="btn small danger" data-leave-type="comp" data-delta="-1">대휴 -1</button>
+                  </div>
+                  <div class="actions"><button id="saveLeaveBalancesBtn" class="btn primary">연차·대휴 잔여일수 저장</button></div>
+                  <div class="privacy-note">연차와 대휴를 수정하면 수정자·수정일시·사유·증감일수가 이력에 남습니다. 주말근무 1일은 달력에서 대휴 1.5일로 자동 적립됩니다.</div>
+                  <div class="leave-history-head"><b>최근 변경 이력</b><button id="refreshLeaveHistoryBtn" type="button" class="btn small">이력 새로고침</button></div>
+                  <div id="employeeLeaveHistory" class="leave-history-list"><div class="empty compact">변경 이력이 없습니다.</div></div>
+                </section>
+
+                <div class="privacy-note">기본 부여 연차를 수정하면 달력 계산에 반영됩니다. 연차 사용은 달력의 연차·반차·반반차 합계이며, 대휴 사용은 대체휴일 사용 일정 합계입니다.</div>
+              </div>
+            </article>
+
+            <article id="employeeAddPanel" class="panel hidden">
+              <div class="panel-head"><h3>신규 직원 추가</h3><span class="badge">계정·조직도 자동 생성</span></div>
+              <div class="form-grid">
+                <label>사원번호<input id="regEmpNo" placeholder="회사 사원번호" /></label>
+                <label>이름<input id="regName" /></label>
+                <label>부서<input id="regDepartment" value="물류본부" /></label>
+                <label>팀<select id="regTeam"><option>발주팀</option><option>국내팀</option><option>해외팀</option><option>B2C</option><option>물류지원팀</option><option>관리</option></select></label>
+                <label>직급<input id="regPosition" placeholder="예: 사원" /></label>
+                <label>연차 부여일수<input id="regAnnualLeave" type="number" min="0" step="0.25" value="15" /></label>
+              </div>
+              <div class="actions"><button id="addRegistryEmployeeBtn" class="btn primary">직원 추가</button></div>
+              <div class="privacy-note"><b>초기 비밀번호는 123456</b>으로 자동 생성됩니다. 직원 추가 즉시 조직도에도 반영됩니다.</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="permissionsPage" class="page">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h3>직원별 화면 권한</h3>
+              <small class="muted-text">직원을 선택한 뒤 필요한 권한만 체크하고 저장하세요.</small>
+            </div>
+            <button id="savePermissionBtn" class="btn primary">권한 저장</button>
+          </div>
+
+          <div id="permissionNotice" class="privacy-note"></div>
+
+          <div class="permission-presets">
+            <button id="basicPermissionBtn" class="btn">기본 권한</button>
+            <button id="clearPermissionBtn" class="btn">전체 해제</button>
+            <button id="allPermissionBtn" class="btn">전체 선택</button>
+          </div>
+
+          <div class="permission-layout">
+            <div id="permissionUsers" class="permission-users"></div>
+            <div id="permissionChecks" class="permission-checks"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
